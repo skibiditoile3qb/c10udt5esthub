@@ -1,7 +1,7 @@
 {
-  "name": "file-upload-streaming-server",
+  "name": "file-upload-server",
   "version": "1.0.0",
-  "description": "Express server with file upload, download, and live streaming functionality",
+  "description": "Express server with file upload and livestreaming",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,16 +16,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": [
-    "express", 
-    "file-upload", 
-    "download", 
-    "server", 
-    "webrtc", 
-    "streaming", 
-    "screen-share", 
-    "camera"
-  ],
+  "keywords": ["express", "file-upload", "livestream", "server"],
   "author": "Your Name",
   "license": "MIT"
 }
