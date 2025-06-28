@@ -41,8 +41,8 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Middleware to check if the request is from the admin
-const isAdmin = (req, res, next) => {
+// Function to check if the request is from the admin
+const checkIsAdmin = (req) => {
   // Get the real IP address (considering proxies)
   const clientIP = req.headers['x-forwarded-for'] || 
                    req.connection.remoteAddress || 
@@ -51,16 +51,35 @@ const isAdmin = (req, res, next) => {
   
   console.log('Client IP:', clientIP, 'Admin IP:', adminIP);
   
-  if (clientIP === adminIP || clientIP === `::ffff:${adminIP}`) {
+  return clientIP === adminIP || clientIP === `::ffff:${adminIP}`;
+};
+
+// Middleware to check if the request is from the admin
+const isAdmin = (req, res, next) => {
+  if (checkIsAdmin(req)) {
     next();
   } else {
-    res.redirect('/user.html');
+    res.redirect('/user');
   }
 };
 
-// Admin route to serve the admin panel
+// Root route - redirect based on admin status
+app.get('/', (req, res) => {
+  if (checkIsAdmin(req)) {
+    res.sendFile(path.join(__dirname, 'public', 'admin-home.html'));
+  } else {
+    res.redirect('/user');
+  }
+});
+
+// Admin home route (shows options for admin)
 app.get('/admin', isAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  res.sendFile(path.join(__dirname, 'public', 'admin-home.html'));
+});
+
+// Admin view route (shows all submissions)
+app.get('/admin/view', isAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-view.html'));
 });
 
 // Route to fetch admin data including uploaded files
@@ -125,7 +144,7 @@ app.post('/submit', upload.single('file'), (req, res) => {
   }
   
   database.push(submission);
-  res.redirect('/user.html?success=1');
+  res.redirect('/user?success=1');
 });
 
 // Route to list available files for download (public)
