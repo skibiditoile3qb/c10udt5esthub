@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -24,25 +24,43 @@
             margin-bottom: 30px;
         }
         .option-buttons {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             justify-content: center;
-            flex-wrap: wrap;
         }
         .option-btn {
             background-color: #007bff;
             color: white;
-            padding: 15px 30px;
+            padding: 20px 30px;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 10px;
             font-size: 16px;
-            transition: background-color 0.3s;
-            display: inline-block;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             text-align: center;
-            min-width: 150px;
+            min-height: 120px;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         .option-btn:hover {
             background-color: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .option-btn .icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .option-btn .title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .option-btn .description {
+            font-size: 12px;
+            opacity: 0.9;
         }
         .admin-view {
             background-color: #28a745;
@@ -50,22 +68,157 @@
         .admin-view:hover {
             background-color: #1e7e34;
         }
-        .description {
+        .live-streams {
+            background-color: #dc3545;
+        }
+        .live-streams:hover {
+            background-color: #c82333;
+        }
+        .user-panel {
+            background-color: #6f42c1;
+        }
+        .user-panel:hover {
+            background-color: #5a32a3;
+        }
+        .main-description {
             text-align: center;
             margin-bottom: 30px;
             color: #666;
+            font-size: 16px;
+        }
+        .stats-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #007bff;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            text-align: center;
+        }
+        .stat-item {
+            background-color: white;
+            padding: 15px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            display: block;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Admin Dashboard</h1>
-        <p class="description">Welcome, Admin! Choose an option below:</p>
+        <h1>🛡️ Admin Dashboard</h1>
+        <p class="main-description">Welcome, Administrator! Monitor submissions, manage files, and view live streams.</p>
+        
+        <div class="stats-section">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span id="totalSubmissions" class="stat-number">0</span>
+                    <div class="stat-label">Total Submissions</div>
+                </div>
+                <div class="stat-item">
+                    <span id="totalFiles" class="stat-number">0</span>
+                    <div class="stat-label">Uploaded Files</div>
+                </div>
+                <div class="stat-item">
+                    <span id="activeStreams" class="stat-number">0</span>
+                    <div class="stat-label">Active Streams</div>
+                </div>
+                <div class="stat-item">
+                    <span id="onlineUsers" class="stat-number">-</span>
+                    <div class="stat-label">Online Users</div>
+                </div>
+            </div>
+        </div>
         
         <div class="option-buttons">
-            <a href="/user" class="option-btn">User Upload</a>
-            <a href="/admin/view" class="option-btn admin-view">Admin View</a>
+            <a href="/user" class="option-btn user-panel">
+                <div class="icon">👤</div>
+                <div class="title">User Panel</div>
+                <div class="description">Access the user upload interface</div>
+            </a>
+            
+            <a href="/admin/view" class="option-btn admin-view">
+                <div class="icon">📋</div>
+                <div class="title">View Submissions</div>
+                <div class="description">Review all text submissions and files</div>
+            </a>
+            
+            <a href="/admin/streams" class="option-btn live-streams">
+                <div class="icon">📹</div>
+                <div class="title">Live Streams</div>
+                <div class="description">Monitor real-time screen & camera feeds</div>
+            </a>
         </div>
     </div>
+
+    <!-- Socket.IO for real-time stats -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Initialize Socket.IO for real-time updates
+        const socket = io();
+        
+        // DOM elements
+        const totalSubmissions = document.getElementById('totalSubmissions');
+        const totalFiles = document.getElementById('totalFiles');
+        const activeStreams = document.getElementById('activeStreams');
+        const onlineUsers = document.getElementById('onlineUsers');
+
+        // Load initial data
+        async function loadStats() {
+            try {
+                const response = await fetch('/admin/data');
+                const data = await response.json();
+                
+                totalSubmissions.textContent = data.submissions.length;
+                totalFiles.textContent = data.files.length;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Socket event listeners for real-time updates
+        socket.on('connect', () => {
+            socket.emit('get-active-streams');
+            loadStats();
+        });
+
+        socket.on('active-streams', (streams) => {
+            activeStreams.textContent = streams.length;
+        });
+
+        socket.on('new-stream', () => {
+            const current = parseInt(activeStreams.textContent) || 0;
+            activeStreams.textContent = current + 1;
+        });
+
+        socket.on('stream-ended', () => {
+            const current = parseInt(activeStreams.textContent) || 0;
+            activeStreams.textContent = Math.max(0, current - 1);
+        });
+
+        socket.on('user-count', (count) => {
+            onlineUsers.textContent = count;
+        });
+
+        // Load stats on page load
+        loadStats();
+
+        // Refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
 </body>
 </html>
