@@ -59,27 +59,34 @@ const isAdmin = (req, res, next) => {
 // Socket.IO for livestreaming
 io.on('connection', (socket) => {
   socket.on('start-stream', (streamId) => {
-    activeStreams.set(streamId, { streamerSocketId: socket.id, viewers: new Set() });
+    activeStreams.set(streamId, { streamerSocketId: socket.id, viewers: new Set(), lastFrame: null });
     socket.join(`stream-${streamId}`);
     socket.streamId = streamId;
   });
 
-  socket.on('webrtc-offer', (data) => {
-    socket.to(`stream-${data.streamId}`).emit('webrtc-offer', data);
-  });
-
-  socket.on('webrtc-answer', (data) => {
-    socket.to(`stream-${data.streamId}`).emit('webrtc-answer', data);
-  });
-
-  socket.on('webrtc-ice', (data) => {
-    socket.to(`stream-${data.streamId}`).emit('webrtc-ice', data);
+  socket.on('stream-frame', (data) => {
+    if (activeStreams.has(data.streamId)) {
+      activeStreams.get(data.streamId).lastFrame = data.frame;
+      socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
+    }
   });
 
   socket.on('join-stream', (streamId) => {
     if (activeStreams.has(streamId)) {
       socket.join(`stream-${streamId}`);
       activeStreams.get(streamId).viewers.add(socket.id);
+      
+      // Send last frame to new viewer
+      const lastFrame = activeStreams.get(streamId).lastFrame;
+      if (lastFrame) {
+        socket.emit('stream-frame', lastFrame);
+      }
+    }
+  });
+
+  socket.on('stop-stream', (streamId) => {
+    if (activeStreams.has(streamId)) {
+      activeStreams.delete(streamId);
     }
   });
 
