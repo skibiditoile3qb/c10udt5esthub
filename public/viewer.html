@@ -16,15 +16,15 @@
         h1 {
             margin-bottom: 20px;
         }
-        #videoContainer {
+        #streamContainer {
             max-width: 100%;
             margin: 0 auto;
         }
-        video {
-            width: 100%;
-            max-width: 1200px;
+        #streamImage {
+            max-width: 100%;
             height: auto;
             background-color: #333;
+            border: 2px solid #555;
         }
         #status {
             margin-top: 20px;
@@ -38,60 +38,32 @@
 </head>
 <body>
     <h1>Live Stream</h1>
-    <div id="videoContainer">
-        <video id="remoteVideo" autoplay playsinline controls></video>
+    <div id="streamContainer">
+        <img id="streamImage" alt="Live Stream" />
     </div>
     <div id="status" class="connecting">Connecting to stream...</div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const video = document.getElementById('remoteVideo');
+        const streamImage = document.getElementById('streamImage');
         const status = document.getElementById('status');
         const streamId = window.location.pathname.split('/').pop();
         
-        let peerConnection;
-
-        async function initViewer() {
-            peerConnection = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            });
-
-            peerConnection.ontrack = (event) => {
-                video.srcObject = event.streams[0];
-                status.textContent = 'Connected to stream';
-                status.className = 'connected';
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('webrtc-ice', { streamId, candidate: event.candidate });
-                }
-            };
-
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'failed') {
-                    status.textContent = 'Connection failed';
-                    status.className = 'error';
-                }
-            };
-
-            socket.emit('join-stream', streamId);
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('webrtc-offer', { streamId, offer });
-        }
-
-        socket.on('webrtc-answer', async (data) => {
-            await peerConnection.setRemoteDescription(data.answer);
+        socket.emit('join-stream', streamId);
+        
+        socket.on('stream-frame', (frame) => {
+            streamImage.src = frame;
+            status.textContent = 'Connected - Live Stream';
+            status.className = 'connected';
         });
-
-        socket.on('webrtc-ice', async (data) => {
-            await peerConnection.addIceCandidate(data.candidate);
-        });
-
-        initViewer();
+        
+        setTimeout(() => {
+            if (!streamImage.src) {
+                status.textContent = 'Stream not available';
+                status.className = 'error';
+            }
+        }, 5000);
     </script>
 </body>
 </html>
