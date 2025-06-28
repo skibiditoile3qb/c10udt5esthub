@@ -113,8 +113,8 @@
         const stopBtn = document.getElementById('stopStream');
         
         let localStream;
-        let peerConnection;
         let streamId;
+        let streaming = false;
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
@@ -126,8 +126,22 @@
             try {
                 localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 streamId = Date.now().toString();
+                streaming = true;
                 
-                socket.emit('start-stream', streamId);
+                const video = document.createElement('video');
+                video.srcObject = localStream;
+                video.play();
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    socket.emit('start-stream', streamId);
+                    streamFrames();
+                };
                 
                 streamStatus.textContent = `Streaming (ID: ${streamId})`;
                 streamStatus.className = 'streaming';
@@ -136,7 +150,16 @@
                 
                 localStream.getVideoTracks()[0].onended = stopStream;
                 
-                setupWebRTC();
+                function streamFrames() {
+                    if (!streaming) return;
+                    
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const frame = canvas.toDataURL('image/jpeg', 0.5);
+                    socket.emit('stream-frame', { streamId, frame });
+                    
+                    setTimeout(streamFrames, 100); // 10 FPS
+                }
+                
             } catch (err) {
                 alert('Error accessing screen: ' + err.message);
             }
@@ -145,52 +168,17 @@
         stopBtn.onclick = stopStream;
 
         function stopStream() {
+            streaming = false;
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
-            if (peerConnection) {
-                peerConnection.close();
-            }
+            socket.emit('stop-stream', streamId);
             
             streamStatus.textContent = 'Not streaming';
             streamStatus.className = 'stopped';
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
         }
-
-        function setupWebRTC() {
-            peerConnection = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            });
-
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('webrtc-ice', { streamId, candidate: event.candidate });
-                }
-            };
-
-            socket.on('webrtc-answer', async (data) => {
-                await peerConnection.setRemoteDescription(data.answer);
-            });
-
-            socket.on('webrtc-ice', async (data) => {
-                await peerConnection.addIceCandidate(data.candidate);
-            });
-        }
-
-        socket.on('webrtc-offer', async (data) => {
-            if (!peerConnection) return;
-            
-            await peerConnection.setRemoteDescription(data.offer);
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            socket.emit('webrtc-answer', { streamId, answer });
-        });
     </script>
 </body>
 </html>
