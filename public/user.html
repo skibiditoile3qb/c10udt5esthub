@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Panel - Upload & Stream</title>
+    <title>User Panel</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 700px;
+            max-width: 600px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -17,16 +17,10 @@
             padding: 30px;
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
         }
         h1, h2 {
             color: #333;
             text-align: center;
-            margin-bottom: 30px;
-        }
-        h2 {
-            margin-bottom: 20px;
-            color: #555;
         }
         .form-group {
             margin-bottom: 20px;
@@ -44,136 +38,41 @@
             border-radius: 5px;
             box-sizing: border-box;
         }
-        textarea {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            resize: vertical;
-        }
-        .btn {
+        input[type="submit"], button {
+            background-color: #007bff;
+            color: white;
             padding: 12px 30px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-            margin: 5px;
+            width: 100%;
+            margin-bottom: 10px;
         }
-        .btn-primary {
-            background-color: #007bff;
-            color: white;
-            width: calc(100% - 10px);
-        }
-        .btn-primary:hover {
+        input[type="submit"]:hover, button:hover {
             background-color: #0056b3;
-        }
-        .btn-success {
-            background-color: #28a745;
-            color: white;
-        }
-        .btn-success:hover {
-            background-color: #1e7e34;
-        }
-        .btn-danger {
-            background-color: #dc3545;
-            color: white;
-        }
-        .btn-danger:hover {
-            background-color: #c82333;
-        }
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background-color: #545b62;
-        }
-        .streaming-controls {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-        .stream-options {
-            display: none;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-        .stream-options.show {
-            display: flex;
         }
         .success-message {
             background-color: #d4edda;
             color: #155724;
             padding: 15px;
-            border: 1px solid #c3e6cb;
             border-radius: 5px;
             margin-bottom: 20px;
             text-align: center;
         }
-        .error-message {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border: 1px solid #f5c6cb;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        .status-offline {
-            background-color: #dc3545;
-        }
-        .status-online {
-            background-color: #28a745;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        .file-info {
-            font-size: 12px;
-            color: #666;
-            margin-top: 5px;
-        }
-        .note {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-left: 4px solid #007bff;
-            margin-bottom: 20px;
-            font-size: 14px;
-            color: #495057;
-        }
-        .stream-preview {
-            display: none;
-            text-align: center;
-            margin: 20px 0;
-        }
-        .stream-preview video {
-            max-width: 100%;
-            height: auto;
-            border: 2px solid #007bff;
-            border-radius: 8px;
+        .stream-section {
+            margin-top: 30px;
+            border-top: 2px solid #007bff;
+            padding-top: 20px;
         }
         #streamStatus {
             text-align: center;
             padding: 10px;
             margin: 10px 0;
             border-radius: 5px;
-            font-weight: bold;
         }
+        .streaming { background-color: #d4edda; color: #155724; }
+        .stopped { background-color: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -184,255 +83,113 @@
             Your submission has been uploaded successfully!
         </div>
         
-        <div id="error-message" class="error-message" style="display: none;">
-        </div>
-        
-        <!-- File Upload Section -->
-        <h2>📁 File Upload</h2>
-        <div class="note">
-            <strong>Note:</strong> You can submit text information and/or upload a file. Both are optional, but at least one should be provided.
-        </div>
-        
         <form action="/submit" method="post" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="info">Enter information:</label>
-                <textarea id="info" name="info" rows="6" placeholder="Type your message or information here..."></textarea>
+                <textarea id="info" name="info" rows="6" placeholder="Type your message..."></textarea>
             </div>
             
             <div class="form-group">
                 <label for="file">Upload file (optional):</label>
                 <input type="file" id="file" name="file" accept=".txt,.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.zip,.rar">
-                <div class="file-info">Max file size: 100MB. Supported formats: txt, pdf, doc, docx, images, zip, rar, etc.</div>
             </div>
             
-            <input type="submit" value="Submit" class="btn btn-primary">
+            <input type="submit" value="Submit">
         </form>
-    </div>
 
-    <!-- Live Streaming Section -->
-    <div class="container">
-        <h2>📹 Live Streaming</h2>
-        <div class="note">
-            <strong>Real-time streaming:</strong> Share your screen or camera feed with the admin. The stream continues even if you switch to other tabs or applications.
-        </div>
-
-        <div id="streamStatus">
-            <span class="status-indicator status-offline"></span>
-            Not streaming
-        </div>
-
-        <div class="streaming-controls">
-            <button id="startStreamBtn" class="btn btn-success">Start Livestream</button>
-            <button id="stopStreamBtn" class="btn btn-danger" style="display: none;">Stop Stream</button>
-        </div>
-
-        <div id="streamOptions" class="stream-options">
-            <button id="screenShareBtn" class="btn btn-secondary">🖥️ Screen Share</button>
-            <button id="cameraBtn" class="btn btn-secondary">📷 Camera</button>
-        </div>
-
-        <div id="streamPreview" class="stream-preview">
-            <video id="localVideo" autoplay muted playsinline></video>
+        <div class="stream-section">
+            <h2>Screen Share</h2>
+            <div id="streamStatus" class="stopped">Not streaming</div>
+            <button id="startStream">Start Stream</button>
+            <button id="stopStream" style="display:none;">Stop Stream</button>
         </div>
     </div>
 
-    <!-- Socket.IO -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Initialize Socket.IO
         const socket = io();
-        
-        // Variables for streaming
-        let localStream = null;
-        let peerConnection = null;
-        let isStreaming = false;
-        let streamType = null;
-
-        // WebRTC configuration
-        const rtcConfig = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
-
-        // DOM elements
-        const startStreamBtn = document.getElementById('startStreamBtn');
-        const stopStreamBtn = document.getElementById('stopStreamBtn');
-        const streamOptions = document.getElementById('streamOptions');
-        const screenShareBtn = document.getElementById('screenShareBtn');
-        const cameraBtn = document.getElementById('cameraBtn');
-        const localVideo = document.getElementById('localVideo');
-        const streamPreview = document.getElementById('streamPreview');
         const streamStatus = document.getElementById('streamStatus');
-        const errorMessage = document.getElementById('error-message');
+        const startBtn = document.getElementById('startStream');
+        const stopBtn = document.getElementById('stopStream');
+        
+        let localStream;
+        let peerConnection;
+        let streamId;
 
-        // Event listeners
-        startStreamBtn.addEventListener('click', () => {
-            streamOptions.classList.add('show');
-            startStreamBtn.style.display = 'none';
-        });
-
-        screenShareBtn.addEventListener('click', () => startStream('screen'));
-        cameraBtn.addEventListener('click', () => startStream('camera'));
-        stopStreamBtn.addEventListener('click', stopStream);
-
-        // Start streaming function
-        async function startStream(type) {
-            try {
-                streamType = type;
-                
-                if (type === 'screen') {
-                    localStream = await navigator.mediaDevices.getDisplayMedia({
-                        video: {
-                            mediaSource: 'screen',
-                            width: { max: 1920 },
-                            height: { max: 1080 },
-                            frameRate: { max: 30 }
-                        },
-                        audio: true
-                    });
-                } else if (type === 'camera') {
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 },
-                            frameRate: { ideal: 30 }
-                        },
-                        audio: true
-                    });
-                }
-
-                // Display local stream
-                localVideo.srcObject = localStream;
-                streamPreview.style.display = 'block';
-
-                // Set up peer connection
-                peerConnection = new RTCPeerConnection(rtcConfig);
-                
-                // Add local stream to peer connection
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
-                });
-
-                // Handle ICE candidates
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        socket.emit('ice-candidate', {
-                            candidate: event.candidate
-                        });
-                    }
-                };
-
-                // Create and send offer
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                
-                socket.emit('offer', {
-                    offer: offer,
-                    streamType: type
-                });
-
-                // Handle stream ending (for screen share)
-                localStream.getVideoTracks()[0].addEventListener('ended', () => {
-                    if (isStreaming) {
-                        stopStream();
-                    }
-                });
-
-                // Update UI
-                isStreaming = true;
-                updateStreamStatus(true, type);
-                streamOptions.classList.remove('show');
-                stopStreamBtn.style.display = 'inline-block';
-
-                // Notify server
-                socket.emit('start-stream', {
-                    streamType: type,
-                    userInfo: {
-                        timestamp: new Date().toISOString(),
-                        userAgent: navigator.userAgent
-                    }
-                });
-
-            } catch (error) {
-                console.error('Error starting stream:', error);
-                showError('Failed to start stream: ' + error.message);
-            }
-        }
-
-        // Stop streaming function
-        function stopStream() {
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-
-            // Update UI
-            isStreaming = false;
-            streamType = null;
-            updateStreamStatus(false);
-            streamPreview.style.display = 'none';
-            startStreamBtn.style.display = 'inline-block';
-            stopStreamBtn.style.display = 'none';
-            streamOptions.classList.remove('show');
-
-            // Notify server
-            socket.emit('stop-stream');
-        }
-
-        // Update stream status indicator
-        function updateStreamStatus(online, type = '') {
-            const indicator = streamStatus.querySelector('.status-indicator');
-            if (online) {
-                indicator.className = 'status-indicator status-online';
-                streamStatus.innerHTML = `<span class="status-indicator status-online"></span>Streaming ${type} live`;
-            } else {
-                indicator.className = 'status-indicator status-offline';
-                streamStatus.innerHTML = `<span class="status-indicator status-offline"></span>Not streaming`;
-            }
-        }
-
-        // Show error message
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-            setTimeout(() => {
-                errorMessage.style.display = 'none';
-            }, 5000);
-        }
-
-        // Socket event listeners
-        socket.on('answer', async (data) => {
-            if (peerConnection && data.answer) {
-                await peerConnection.setRemoteDescription(data.answer);
-            }
-        });
-
-        socket.on('ice-candidate', (data) => {
-            if (peerConnection && data.candidate) {
-                peerConnection.addIceCandidate(data.candidate);
-            }
-        });
-
-        // Check for success parameter in URL (file upload)
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
             document.getElementById('success-message').style.display = 'block';
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            if (isStreaming) {
-                stopStream();
+        startBtn.onclick = async () => {
+            try {
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                streamId = Date.now().toString();
+                
+                socket.emit('start-stream', streamId);
+                
+                streamStatus.textContent = `Streaming (ID: ${streamId})`;
+                streamStatus.className = 'streaming';
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                
+                localStream.getVideoTracks()[0].onended = stopStream;
+                
+                setupWebRTC();
+            } catch (err) {
+                alert('Error accessing screen: ' + err.message);
             }
+        };
+
+        stopBtn.onclick = stopStream;
+
+        function stopStream() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+            
+            streamStatus.textContent = 'Not streaming';
+            streamStatus.className = 'stopped';
+            startBtn.style.display = 'block';
+            stopBtn.style.display = 'none';
+        }
+
+        function setupWebRTC() {
+            peerConnection = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('webrtc-ice', { streamId, candidate: event.candidate });
+                }
+            };
+
+            socket.on('webrtc-answer', async (data) => {
+                await peerConnection.setRemoteDescription(data.answer);
+            });
+
+            socket.on('webrtc-ice', async (data) => {
+                await peerConnection.addIceCandidate(data.candidate);
+            });
+        }
+
+        socket.on('webrtc-offer', async (data) => {
+            if (!peerConnection) return;
+            
+            await peerConnection.setRemoteDescription(data.offer);
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            socket.emit('webrtc-answer', { streamId, answer });
         });
     </script>
 </body>
