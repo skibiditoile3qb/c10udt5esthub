@@ -44,10 +44,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Function to check if the request is from the admin
 const checkIsAdmin = (req) => {
   // Get the real IP address (considering proxies)
-  const clientIP = req.headers['x-forwarded-for'] || 
-                   req.connection.remoteAddress || 
-                   req.socket.remoteAddress ||
-                   (req.connection.socket ? req.connection.socket.remoteAddress : null);
+  let clientIP = req.headers['x-forwarded-for'] || 
+                 req.connection.remoteAddress || 
+                 req.socket.remoteAddress ||
+                 (req.connection.socket ? req.connection.socket.remoteAddress : null);
+  
+  // If x-forwarded-for contains multiple IPs, take the first one (original client)
+  if (clientIP && clientIP.includes(',')) {
+    clientIP = clientIP.split(',')[0].trim();
+  }
   
   console.log('Client IP:', clientIP, 'Admin IP:', adminIP);
   
