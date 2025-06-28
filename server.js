@@ -3,7 +3,18 @@ const bodyParser = require('body-parser');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const socketIo = require('socket.io');
+
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
 const port = process.env.PORT || 3000;
 
 // Admin IP address (your IP)
@@ -12,6 +23,7 @@ const adminIP = '68.102.150.181';
 // In-memory database
 let database = [];
 let uploadedFiles = [];
+let activeStreams = new Map(); // Store active streams
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -43,13 +55,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Function to check if the request is from the admin
 const checkIsAdmin = (req) => {
-  // Get the real IP address (considering proxies)
   let clientIP = req.headers['x-forwarded-for'] || 
                  req.connection.remoteAddress || 
                  req.socket.remoteAddress ||
                  (req.connection.socket ? req.connection.socket.remoteAddress : null);
   
-  // If x-forwarded-for contains multiple IPs, take the first one (original client)
   if (clientIP && clientIP.includes(',')) {
     clientIP = clientIP.split(',')[0].trim();
   }
@@ -68,7 +78,75 @@ const isAdmin = (req, res, next) => {
   }
 };
 
-// Root route - redirect based on admin status
+// Socket.IO for WebRTC signaling and streaming
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+  
+  // Handle stream start
+  socket.on('start-stream', (data) => {
+    const { streamType, userInfo } = data;
+    activeStreams.set(socket.id, {
+      type: streamType,
+      userInfo: userInfo,
+      startTime: new Date(),
+      socketId: socket.id
+    });
+    
+    // Notify admins about new stream
+    socket.broadcast.emit('new-stream', {
+      streamId: socket.id,
+      type: streamType,
+      userInfo: userInfo,
+      startTime: new Date()
+    });
+    
+    console.log(`Stream started: ${streamType} from ${socket.id}`);
+  });
+  
+  // Handle WebRTC signaling
+  socket.on('offer', (data) => {
+    socket.broadcast.emit('offer', { ...data, from: socket.id });
+  });
+  
+  socket.on('answer', (data) => {
+    socket.to(data.to).emit('answer', { ...data, from: socket.id });
+  });
+  
+  socket.on('ice-candidate', (data) => {
+    socket.broadcast.emit('ice-candidate', { ...data, from: socket.id });
+  });
+  
+  // Handle stream data chunks (for recording/saving)
+  socket.on('stream-chunk', (data) => {
+    // You can save chunks here if needed
+    console.log('Received stream chunk from:', socket.id);
+  });
+  
+  // Handle stream stop
+  socket.on('stop-stream', () => {
+    activeStreams.delete(socket.id);
+    socket.broadcast.emit('stream-ended', socket.id);
+    console.log('Stream ended:', socket.id);
+  });
+  
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    activeStreams.delete(socket.id);
+    socket.broadcast.emit('stream-ended', socket.id);
+    console.log('User disconnected:', socket.id);
+  });
+  
+  // Get active streams (for admins)
+  socket.on('get-active-streams', () => {
+    const streams = Array.from(activeStreams.entries()).map(([id, data]) => ({
+      streamId: id,
+      ...data
+    }));
+    socket.emit('active-streams', streams);
+  });
+});
+
+// Existing routes...
 app.get('/', (req, res) => {
   if (checkIsAdmin(req)) {
     res.sendFile(path.join(__dirname, 'public', 'admin-home.html'));
@@ -77,17 +155,19 @@ app.get('/', (req, res) => {
   }
 });
 
-// Admin home route (shows options for admin)
 app.get('/admin', isAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-home.html'));
 });
 
-// Admin view route (shows all submissions)
 app.get('/admin/view', isAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-view.html'));
 });
 
-// Route to fetch admin data including uploaded files
+// New route for stream viewer (admin only)
+app.get('/admin/streams', isAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-streams.html'));
+});
+
 app.get('/admin/data', isAdmin, (req, res) => {
   res.json({
     submissions: database,
@@ -95,7 +175,6 @@ app.get('/admin/data', isAdmin, (req, res) => {
   });
 });
 
-// Route to download files (admin only)
 app.get('/admin/download/:filename', isAdmin, (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
@@ -107,7 +186,6 @@ app.get('/admin/download/:filename', isAdmin, (req, res) => {
   }
 });
 
-// Route to delete files (admin only)
 app.delete('/admin/files/:filename', isAdmin, (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
@@ -121,12 +199,10 @@ app.delete('/admin/files/:filename', isAdmin, (req, res) => {
   }
 });
 
-// User route to serve the user panel
 app.get('/user', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
-// Submit route to handle user submissions with file upload
 app.post('/submit', upload.single('file'), (req, res) => {
   const info = req.body.info;
   const submission = {
@@ -135,7 +211,6 @@ app.post('/submit', upload.single('file'), (req, res) => {
     ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress
   };
   
-  // If a file was uploaded
   if (req.file) {
     const fileInfo = {
       originalName: req.file.originalname,
@@ -152,7 +227,6 @@ app.post('/submit', upload.single('file'), (req, res) => {
   res.redirect('/user?success=1');
 });
 
-// Route to list available files for download (public)
 app.get('/files', (req, res) => {
   const publicFiles = uploadedFiles.map(file => ({
     originalName: file.originalName,
@@ -163,12 +237,10 @@ app.get('/files', (req, res) => {
   res.json(publicFiles);
 });
 
-// Route for public file downloads
 app.get('/download/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
   
-  // Check if file exists in our database
   const fileExists = uploadedFiles.some(file => file.filename === filename);
   
   if (fileExists && fs.existsSync(filePath)) {
@@ -178,11 +250,11 @@ app.get('/download/:filename', (req, res) => {
   }
 });
 
-// Trust proxy settings (important for getting real IP behind reverse proxy)
 app.set('trust proxy', true);
 
-app.listen(port, '0.0.0.0', () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://0.0.0.0:${port}`);
   console.log(`Admin access from IP: ${adminIP}`);
   console.log(`Files will be stored in: ${uploadsDir}`);
+  console.log(`WebRTC streaming enabled`);
 });
