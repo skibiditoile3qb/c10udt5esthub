@@ -126,6 +126,17 @@
         <div class="stream-section">
             <h2>High-Performance Screen Share</h2>
             
+            <div class="form-group">
+                <label for="thumbnail">Stream Thumbnail (optional):</label>
+                <input type="file" id="thumbnail" accept=".jpg,.jpeg,.png,.gif,.webp">
+                <div id="thumbnailPreview" style="margin-top: 10px; text-align: center; display: none;">
+                    <img id="thumbnailImg" style="max-width: 200px; max-height: 150px; border-radius: 5px; border: 2px solid #ddd;">
+                    <div style="margin-top: 5px;">
+                        <button type="button" id="removeThumbnail" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Remove</button>
+                    </div>
+                </div>
+            </div>
+            
             <div class="performance-controls">
                 <label for="fpsSelect">Frame Rate:</label>
                 <select id="fpsSelect">
@@ -187,11 +198,16 @@
         const qualitySelect = document.getElementById('qualitySelect');
         const resolutionSelect = document.getElementById('resolutionSelect');
         const statsDisplay = document.getElementById('statsDisplay');
+        const thumbnailInput = document.getElementById('thumbnail');
+        const thumbnailPreview = document.getElementById('thumbnailPreview');
+        const thumbnailImg = document.getElementById('thumbnailImg');
+        const removeThumbnailBtn = document.getElementById('removeThumbnail');
         
         let localStream;
         let streamId;
         let streaming = false;
         let frameInterval;
+        let thumbnailData = null;
         
         // Performance tracking
         let framesSent = 0;
@@ -200,6 +216,33 @@
         let bytesTransferred = 0;
         let fpsCounter = 0;
         let lastFpsUpdate = Date.now();
+
+        // Thumbnail handling
+        thumbnailInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Check file size (limit to 5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('Thumbnail file size must be less than 5MB');
+                    thumbnailInput.value = '';
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    thumbnailData = e.target.result;
+                    thumbnailImg.src = thumbnailData;
+                    thumbnailPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        removeThumbnailBtn.addEventListener('click', function() {
+            thumbnailData = null;
+            thumbnailInput.value = '';
+            thumbnailPreview.style.display = 'none';
+        });
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
@@ -244,7 +287,12 @@
                     canvas.width = Math.floor(video.videoWidth * scale);
                     canvas.height = Math.floor(video.videoHeight * scale);
                     
-                    socket.emit('start-stream', streamId);
+                    socket.emit('start-stream', { 
+                        streamId, 
+                        thumbnail: thumbnailData,
+                        streamTitle: `Stream ${streamId}`,
+                        startTime: new Date().toISOString()
+                    });
                     startOptimizedCapture(video, canvas, ctx);
                 };
                 
