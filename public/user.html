@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Panel(share things)</title>
+    <title>User Panel - Optimized</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -73,7 +73,6 @@
         }
         .streaming { background-color: #d4edda; color: #155724; }
         .stopped { background-color: #f8d7da; color: #721c24; }
-        .ultra-fast { background-color: #fff3cd; color: #856404; }
         .performance-controls {
             margin: 10px 0;
             text-align: center;
@@ -86,28 +85,25 @@
             padding: 5px;
             border-radius: 3px;
         }
-        .fps-counter {
-            text-align: center;
-            font-weight: bold;
-            margin: 10px 0;
-            padding: 5px;
-            background-color: #e9ecef;
-            border-radius: 5px;
-        }
-        .warning {
-            background-color: #fff3cd;
-            color: #856404;
+        .stats {
+            background-color: #f8f9fa;
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
+            font-size: 12px;
+        }
+        .optimization-controls {
+            margin: 10px 0;
             text-align: center;
-            font-size: 14px;
+        }
+        .optimization-controls input[type="checkbox"] {
+            margin-right: 5px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Ultra Fast User Panel</h1>
+        <h1>User Panel - Optimized</h1>
         
         <div id="success-message" class="success-message" style="display: none;">
             Your submission has been uploaded successfully!
@@ -128,46 +124,50 @@
         </form>
 
         <div class="stream-section">
-            <h2>Ultra Fast Screen Share</h2>
+            <h2>High-Performance Screen Share</h2>
+            
             <div class="performance-controls">
                 <label for="fpsSelect">Frame Rate:</label>
                 <select id="fpsSelect">
-                    <option value="200">5 FPS (Battery Saver)</option>
-                    <option value="100">10 FPS (Good Performance)</option>
+                    <option value="16">60 FPS (Ultra Fast)</option>
+                    <option value="33">30 FPS (Fast)</option>
                     <option value="67">15 FPS (Balanced)</option>
-                    <option value="50">20 FPS (High Quality)</option>
-                    <option value="20">50 FPS (Very Fast)</option>
-                    <option value="10">100 FPS (Ultra Fast)</option>
-                    <option value="8">120 FPS (Extreme)</option>
-                    <option value="5">200 FPS (Ludicrous)</option>
-                    <option value="3">333 FPS (Insane)</option>
-                    <option value="1">1000 FPS (MAXIMUM OVERDRIVE)</option>
-                    <option value="0">UNLIMITED FPS (Use at your own risk!)</option>
+                    <option value="100">10 FPS (Good Performance)</option>
+                    <option value="200">5 FPS (Best Performance)</option>
                 </select>
-                <label for="qualitySelect">Quality:</label>
-                <select id="qualitySelect">
-                    <option value="0.1">Ultra Low (Insane Speed)</option>
-                    <option value="0.3">Very Low (Max Speed)</option>
-                    <option value="0.5">Low (Fastest)</option>
-                    <option value="0.7" selected>Medium</option>
-                    <option value="0.9">High (Slower)</option>
-                </select>
+                
                 <label for="resolutionSelect">Resolution:</label>
                 <select id="resolutionSelect">
-                    <option value="0.25">Potato (25% - Lightning Fast)</option>
-                    <option value="0.5">Low (50% - Very Fast)</option>
-                    <option value="0.75" selected>Medium (75%)</option>
-                    <option value="1">Full (100% - Slower)</option>
+                    <option value="480">480p (Fastest)</option>
+                    <option value="720" selected>720p (Fast)</option>
+                    <option value="1080">1080p (Balanced)</option>
+                    <option value="1440">1440p (High Quality)</option>
+                </select>
+                
+                <label for="qualitySelect">Quality:</label>
+                <select id="qualitySelect">
+                    <option value="0.3">Ultra Low (Fastest)</option>
+                    <option value="0.5" selected>Low (Fast)</option>
+                    <option value="0.7">Medium</option>
+                    <option value="0.9">High (Slower)</option>
                 </select>
             </div>
-            <div class="warning">
-                ⚠️ Ultra high FPS modes may cause browser lag or crashes. Start with lower settings first!
+            
+            <div class="optimization-controls">
+                <label><input type="checkbox" id="skipUnchanged" checked> Skip Unchanged Frames</label>
+                <label><input type="checkbox" id="batchFrames" checked> Batch Multiple Frames</label>
+                <label><input type="checkbox" id="useWebP"> Use WebP Format (if supported)</label>
             </div>
+            
             <div id="streamStatus" class="stopped">Not streaming</div>
-            <div id="fpsCounter" class="fps-counter" style="display: none;">
-                Actual FPS: <span id="actualFps">0</span> | Target: <span id="targetFps">0</span>
+            <div id="statsDisplay" class="stats" style="display: none;">
+                FPS: <span id="actualFps">0</span> | 
+                Data Rate: <span id="dataRate">0</span> KB/s | 
+                Frames Sent: <span id="framesSent">0</span> |
+                Frames Skipped: <span id="framesSkipped">0</span>
             </div>
-            <button id="startStream">Start Ultra Fast Stream</button>
+            
+            <button id="startStream">Start High-Speed Stream</button>
             <button id="stopStream" style="display:none;">Stop Stream</button>
         </div>
     </div>
@@ -175,25 +175,44 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-
         const streamStatus = document.getElementById('streamStatus');
         const startBtn = document.getElementById('startStream');
         const stopBtn = document.getElementById('stopStream');
         const fpsSelect = document.getElementById('fpsSelect');
         const qualitySelect = document.getElementById('qualitySelect');
         const resolutionSelect = document.getElementById('resolutionSelect');
-        const fpsCounter = document.getElementById('fpsCounter');
-        const actualFpsSpan = document.getElementById('actualFps');
-        const targetFpsSpan = document.getElementById('targetFps');
+        const skipUnchangedCheck = document.getElementById('skipUnchanged');
+        const batchFramesCheck = document.getElementById('batchFrames');
+        const useWebPCheck = document.getElementById('useWebP');
+        const statsDisplay = document.getElementById('statsDisplay');
         
         let localStream;
         let streamId;
         let streaming = false;
         let frameInterval;
-        let rafId;
-        let lastFrameTime = 0;
-        let frameCount = 0;
-        let fpsStartTime = Date.now();
+        let lastFrameData = null;
+        let frameQueue = [];
+        let batchTimer = null;
+        
+        // Performance tracking
+        let framesSent = 0;
+        let framesSkipped = 0;
+        let lastStatsUpdate = Date.now();
+        let bytesTransferred = 0;
+        let fpsCounter = 0;
+        let lastFpsUpdate = Date.now();
+
+        // Check WebP support
+        const supportsWebP = (() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 1;
+            return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+        })();
+        
+        if (!supportsWebP) {
+            useWebPCheck.disabled = true;
+            useWebPCheck.parentElement.style.opacity = '0.5';
+        }
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
@@ -203,121 +222,147 @@
 
         startBtn.onclick = async () => {
             try {
-                const resolution = parseFloat(resolutionSelect.value);
-                const maxWidth = Math.floor(1920 * resolution);
-                const maxHeight = Math.floor(1080 * resolution);
+                const maxRes = parseInt(resolutionSelect.value);
                 
-                // Get screen with optimized settings for speed
                 localStream = await navigator.mediaDevices.getDisplayMedia({ 
                     video: { 
-                        width: { max: maxWidth }, 
-                        height: { max: maxHeight },
-                        frameRate: { max: 60 } // Browser limit
-                    } 
+                        width: { max: maxRes === 480 ? 854 : maxRes === 720 ? 1280 : maxRes === 1080 ? 1920 : 2560 }, 
+                        height: { max: maxRes },
+                        frameRate: { ideal: 60, max: 60 }
+                    },
+                    audio: false // Disable audio for better performance
                 });
                 
                 streamId = Date.now().toString();
                 streaming = true;
-                frameCount = 0;
-                fpsStartTime = Date.now();
+                framesSent = 0;
+                framesSkipped = 0;
+                bytesTransferred = 0;
                 
                 const video = document.createElement('video');
                 video.srcObject = localStream;
+                video.muted = true; // Ensure muted for autoplay
                 video.play();
                 
                 const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // Optimize canvas for speed
-                ctx.imageSmoothingEnabled = false;
-                ctx.webkitImageSmoothingEnabled = false;
-                ctx.mozImageSmoothingEnabled = false;
+                const ctx = canvas.getContext('2d', {
+                    alpha: false,
+                    desynchronized: true,
+                    willReadFrequently: false
+                });
                 
                 video.onloadedmetadata = () => {
-                    const resolution = parseFloat(resolutionSelect.value);
-                    canvas.width = Math.floor(video.videoWidth * resolution);
-                    canvas.height = Math.floor(video.videoHeight * resolution);
+                    const maxRes = parseInt(resolutionSelect.value);
+                    const scale = Math.min(maxRes * (16/9) / video.videoWidth, maxRes / video.videoHeight);
+                    canvas.width = Math.floor(video.videoWidth * scale);
+                    canvas.height = Math.floor(video.videoHeight * scale);
                     
                     socket.emit('start-stream', streamId);
-                    startUltraFastCapture(video, canvas, ctx);
+                    startOptimizedCapture(video, canvas, ctx);
                 };
                 
-                const fps = fpsSelect.value === '0' ? 'UNLIMITED' : Math.floor(1000 / parseInt(fpsSelect.value));
-                streamStatus.textContent = `🚀 ULTRA FAST STREAMING (${fps} FPS Target)`;
-                streamStatus.className = 'ultra-fast';
+                streamStatus.textContent = `High-Speed Streaming (ID: ${streamId})`;
+                streamStatus.className = 'streaming';
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
-                fpsCounter.style.display = 'block';
-                targetFpsSpan.textContent = fps;
+                statsDisplay.style.display = 'block';
                 
                 localStream.getVideoTracks()[0].onended = stopStream;
+                
+                // Start stats updates
+                updateStats();
                 
             } catch (err) {
                 alert('Error accessing screen: ' + err.message);
             }
         };
 
-        function startUltraFastCapture(video, canvas, ctx) {
-            const fpsInterval = parseInt(fpsSelect.value);
-            const quality = parseFloat(qualitySelect.value);
-            
-            if (fpsInterval === 0) {
-                // UNLIMITED FPS MODE - Use requestAnimationFrame
-                const captureFrameRAF = (currentTime) => {
-                    if (!streaming) return;
-                    
-                    // Ultra fast frame capture
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const frame = canvas.toDataURL('image/jpeg', quality);
-                    socket.emit('stream-frame', { streamId, frame });
-                    
-                    updateFPSCounter();
-                    rafId = requestAnimationFrame(captureFrameRAF);
-                };
-                rafId = requestAnimationFrame(captureFrameRAF);
-            } else {
-                // High-precision interval timing
-                let lastTime = performance.now();
+        function startOptimizedCapture(video, canvas, ctx) {
+            const captureFrame = () => {
+                if (!streaming) return;
                 
-                const captureFrame = () => {
-                    if (!streaming) return;
+                try {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    const currentTime = performance.now();
-                    if (currentTime - lastTime >= fpsInterval) {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const frame = canvas.toDataURL('image/jpeg', quality);
-                        socket.emit('stream-frame', { streamId, frame });
-                        
-                        updateFPSCounter();
-                        lastTime = currentTime;
+                    const quality = parseFloat(qualitySelect.value);
+                    const format = useWebPCheck.checked && supportsWebP ? 'webp' : 'jpeg';
+                    const frameData = canvas.toDataURL(`image/${format}`, quality);
+                    
+                    // Skip unchanged frames if enabled
+                    if (skipUnchangedCheck.checked && lastFrameData === frameData) {
+                        framesSkipped++;
+                        return;
                     }
                     
-                    rafId = requestAnimationFrame(captureFrame);
-                };
-                rafId = requestAnimationFrame(captureFrame);
+                    lastFrameData = frameData;
+                    
+                    if (batchFramesCheck.checked) {
+                        // Add to batch queue
+                        frameQueue.push({ streamId, frame: frameData, timestamp: Date.now() });
+                        
+                        // Process batch if queue is full or timer expires
+                        if (frameQueue.length >= 3) {
+                            processBatch();
+                        } else if (!batchTimer) {
+                            batchTimer = setTimeout(processBatch, 50); // Process batch after 50ms
+                        }
+                    } else {
+                        // Send immediately
+                        socket.emit('stream-frame', { streamId, frame: frameData, timestamp: Date.now() });
+                        framesSent++;
+                        bytesTransferred += frameData.length;
+                    }
+                    
+                    fpsCounter++;
+                } catch (err) {
+                    console.error('Frame capture error:', err);
+                }
+            };
+            
+            const fps = parseInt(fpsSelect.value);
+            frameInterval = setInterval(captureFrame, fps);
+        }
+
+        function processBatch() {
+            if (frameQueue.length === 0) return;
+            
+            // Send the most recent frames from the batch
+            const framesToSend = frameQueue.slice(-2); // Send last 2 frames
+            socket.emit('stream-batch', { streamId, frames: framesToSend });
+            
+            framesSent += framesToSend.length;
+            framesToSend.forEach(frame => {
+                bytesTransferred += frame.frame.length;
+            });
+            
+            frameQueue = [];
+            if (batchTimer) {
+                clearTimeout(batchTimer);
+                batchTimer = null;
             }
         }
 
-        function updateFPSCounter() {
-            frameCount++;
-            const now = Date.now();
-            const elapsed = now - fpsStartTime;
+        function updateStats() {
+            if (!streaming) return;
             
-            if (elapsed >= 1000) { // Update every second
-                const actualFps = Math.round((frameCount * 1000) / elapsed);
-                actualFpsSpan.textContent = actualFps;
-                frameCount = 0;
-                fpsStartTime = now;
+            const now = Date.now();
+            const timeDiff = (now - lastFpsUpdate) / 1000;
+            
+            if (timeDiff >= 1) {
+                const actualFps = Math.round(fpsCounter / timeDiff);
+                const dataRate = Math.round((bytesTransferred / 1024) / timeDiff);
                 
-                // Change color based on performance
-                if (actualFps >= parseInt(targetFpsSpan.textContent) * 0.8) {
-                    fpsCounter.style.backgroundColor = '#d4edda';
-                    fpsCounter.style.color = '#155724';
-                } else {
-                    fpsCounter.style.backgroundColor = '#f8d7da';
-                    fpsCounter.style.color = '#721c24';
-                }
+                document.getElementById('actualFps').textContent = actualFps;
+                document.getElementById('dataRate').textContent = dataRate;
+                document.getElementById('framesSent').textContent = framesSent;
+                document.getElementById('framesSkipped').textContent = framesSkipped;
+                
+                fpsCounter = 0;
+                bytesTransferred = 0;
+                lastFpsUpdate = now;
             }
+            
+            setTimeout(updateStats, 100);
         }
 
         stopBtn.onclick = stopStream;
@@ -327,40 +372,50 @@
             if (frameInterval) {
                 clearInterval(frameInterval);
             }
-            if (rafId) {
-                cancelAnimationFrame(rafId);
+            if (batchTimer) {
+                clearTimeout(batchTimer);
+                batchTimer = null;
             }
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
             socket.emit('stop-stream', streamId);
             
+            // Process any remaining frames in queue
+            if (frameQueue.length > 0) {
+                processBatch();
+            }
+            
             streamStatus.textContent = 'Not streaming';
             streamStatus.className = 'stopped';
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
-            fpsCounter.style.display = 'none';
+            statsDisplay.style.display = 'none';
+            
+            lastFrameData = null;
+            frameQueue = [];
         }
-
-        // Performance monitoring
-        fpsSelect.addEventListener('change', () => {
-            const value = fpsSelect.value;
-            if (value === '0') {
-                alert('⚠️ UNLIMITED FPS MODE ACTIVATED!\n\nThis will use maximum CPU and may cause:\n- Browser lag or freezing\n- High CPU usage\n- Possible crashes\n\nUse at your own risk!');
-            } else if (parseInt(value) <= 5) {
-                alert('⚠️ EXTREME HIGH FPS MODE!\n\nThis setting may cause performance issues. Monitor your system resources.');
-            }
-        });
 
         socket.on('force-stop-stream', () => {
             alert('Stream ended by administrator');
             stopStream();
         });
 
-        // Handle connection issues
+        // Handle connection issues with retry
         socket.on('connect_error', () => {
-            streamStatus.textContent = 'Connection error - check internet';
+            streamStatus.textContent = 'Connection error - retrying...';
             streamStatus.className = 'stopped';
+            setTimeout(() => socket.connect(), 2000);
+        });
+
+        // Optimize settings based on connection
+        socket.on('connection-quality', (quality) => {
+            if (quality === 'poor' && streaming) {
+                // Auto-adjust for poor connection
+                qualitySelect.value = '0.3';
+                resolutionSelect.value = '480';
+                fpsSelect.value = '100';
+            }
         });
     </script>
 </body>
