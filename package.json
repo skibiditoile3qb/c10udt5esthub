@@ -11,12 +11,7 @@
     "express": "^4.18.2",
     "body-parser": "^1.20.2",
     "multer": "^1.4.5-lts.1",
-    "socket.io": "^4.7.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "keywords": ["express", "file-upload", "livestream", "server"],
-  "author": "Your Name",
-  "license": "MIT"
+    "socket.io": "^4.7.2",
+    "fluent-ffmpeg": "^2.1.2"
+  }
 }
