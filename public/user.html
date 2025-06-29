@@ -73,6 +73,18 @@
         }
         .streaming { background-color: #d4edda; color: #155724; }
         .stopped { background-color: #f8d7da; color: #721c24; }
+        .performance-controls {
+            margin: 10px 0;
+            text-align: center;
+        }
+        .performance-controls label {
+            display: inline;
+            margin-right: 10px;
+        }
+        .performance-controls select {
+            padding: 5px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -99,6 +111,21 @@
 
         <div class="stream-section">
             <h2>Screen Share</h2>
+            <div class="performance-controls">
+                <label for="fpsSelect">Frame Rate:</label>
+                <select id="fpsSelect">
+                    <option value="200">5 FPS (Best Performance)</option>
+                    <option value="100">10 FPS (Good Performance)</option>
+                    <option value="67">15 FPS (Balanced)</option>
+                    <option value="50">20 FPS (Higher Quality)</option>
+                </select>
+                <label for="qualitySelect">Quality:</label>
+                <select id="qualitySelect">
+                    <option value="0.5">Low (Fastest)</option>
+                    <option value="0.7" selected>Medium</option>
+                    <option value="0.9">High (Slower)</option>
+                </select>
+            </div>
             <div id="streamStatus" class="stopped">Not streaming</div>
             <button id="startStream">Start Stream</button>
             <button id="stopStream" style="display:none;">Stop Stream</button>
@@ -111,10 +138,13 @@
         const streamStatus = document.getElementById('streamStatus');
         const startBtn = document.getElementById('startStream');
         const stopBtn = document.getElementById('stopStream');
+        const fpsSelect = document.getElementById('fpsSelect');
+        const qualitySelect = document.getElementById('qualitySelect');
         
         let localStream;
         let streamId;
         let streaming = false;
+        let frameInterval;
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
@@ -124,7 +154,15 @@
 
         startBtn.onclick = async () => {
             try {
-                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                // Get screen with lower resolution for better performance
+                localStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { 
+                        width: { max: 1280 }, 
+                        height: { max: 720 },
+                        frameRate: { max: 15 }
+                    } 
+                });
+                
                 streamId = Date.now().toString();
                 streaming = true;
                 
@@ -136,11 +174,13 @@
                 const ctx = canvas.getContext('2d');
                 
                 video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    // Scale down canvas for better performance
+                    const scale = Math.min(800 / video.videoWidth, 600 / video.videoHeight);
+                    canvas.width = video.videoWidth * scale;
+                    canvas.height = video.videoHeight * scale;
                     
                     socket.emit('start-stream', streamId);
-                    streamFrames();
+                    startFrameCapture(video, canvas, ctx);
                 };
                 
                 streamStatus.textContent = `Streaming (ID: ${streamId})`;
@@ -150,25 +190,32 @@
                 
                 localStream.getVideoTracks()[0].onended = stopStream;
                 
-                function streamFrames() {
-                    if (!streaming) return;
-                    
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const frame = canvas.toDataURL('image/jpeg', 0.7);
-                    socket.emit('stream-frame', { streamId, frame });
-                    
-                    setTimeout(streamFrames, 33); // 30 FPS
-                }
-                
             } catch (err) {
                 alert('Error accessing screen: ' + err.message);
             }
         };
 
+        function startFrameCapture(video, canvas, ctx) {
+            const captureFrame = () => {
+                if (!streaming) return;
+                
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const quality = parseFloat(qualitySelect.value);
+                const frame = canvas.toDataURL('image/jpeg', quality);
+                socket.emit('stream-frame', { streamId, frame });
+            };
+            
+            const fps = parseInt(fpsSelect.value);
+            frameInterval = setInterval(captureFrame, fps);
+        }
+
         stopBtn.onclick = stopStream;
 
         function stopStream() {
             streaming = false;
+            if (frameInterval) {
+                clearInterval(frameInterval);
+            }
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
@@ -179,10 +226,17 @@
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
         }
+
         socket.on('force-stop-stream', () => {
-    alert('Stream ended by administrator');
-    stopStream();
-});
+            alert('Stream ended by administrator');
+            stopStream();
+        });
+
+        // Handle connection issues
+        socket.on('connect_error', () => {
+            streamStatus.textContent = 'Connection error - check internet';
+            streamStatus.className = 'stopped';
+        });
     </script>
 </body>
 </html>
