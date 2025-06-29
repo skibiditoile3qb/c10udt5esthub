@@ -129,11 +129,21 @@
             <div class="performance-controls">
                 <label for="fpsSelect">Frame Rate:</label>
                 <select id="fpsSelect">
-                    <option value="16">60 FPS (Ultra Fast)</option>
-                    <option value="33">30 FPS (Fast)</option>
-                    <option value="67">15 FPS (Balanced)</option>
-                    <option value="100">10 FPS (Good Performance)</option>
-                    <option value="200">5 FPS (Best Performance)</option>
+                    <option value="4">240 FPS (Ultra Performance)</option>
+                    <option value="6">165 FPS (Extreme)</option>
+                    <option value="7">144 FPS (Gaming)</option>
+                    <option value="8">120 FPS (Very High)</option>
+                    <option value="11">90 FPS (High)</option>
+                    <option value="13">75 FPS (High)</option>
+                    <option value="16">60 FPS (Standard)</option>
+                    <option value="20">50 FPS (Good)</option>
+                    <option value="25">40 FPS (Good)</option>
+                    <option value="33" selected>30 FPS (Balanced)</option>
+                    <option value="40">25 FPS (Moderate)</option>
+                    <option value="50">20 FPS (Moderate)</option>
+                    <option value="67">15 FPS (Low)</option>
+                    <option value="100">10 FPS (Very Low)</option>
+                    <option value="200">5 FPS (Minimal)</option>
                 </select>
                 
                 <label for="resolutionSelect">Resolution:</label>
@@ -153,18 +163,13 @@
                 </select>
             </div>
             
-            <div class="optimization-controls">
-                <label><input type="checkbox" id="skipUnchanged" checked> Skip Unchanged Frames</label>
-                <label><input type="checkbox" id="batchFrames" checked> Batch Multiple Frames</label>
-                <label><input type="checkbox" id="useWebP"> Use WebP Format (if supported)</label>
-            </div>
+
             
             <div id="streamStatus" class="stopped">Not streaming</div>
             <div id="statsDisplay" class="stats" style="display: none;">
                 FPS: <span id="actualFps">0</span> | 
                 Data Rate: <span id="dataRate">0</span> KB/s | 
-                Frames Sent: <span id="framesSent">0</span> |
-                Frames Skipped: <span id="framesSkipped">0</span>
+                Frames Sent: <span id="framesSent">0</span>
             </div>
             
             <button id="startStream">Start High-Speed Stream</button>
@@ -181,18 +186,12 @@
         const fpsSelect = document.getElementById('fpsSelect');
         const qualitySelect = document.getElementById('qualitySelect');
         const resolutionSelect = document.getElementById('resolutionSelect');
-        const skipUnchangedCheck = document.getElementById('skipUnchanged');
-        const batchFramesCheck = document.getElementById('batchFrames');
-        const useWebPCheck = document.getElementById('useWebP');
         const statsDisplay = document.getElementById('statsDisplay');
         
         let localStream;
         let streamId;
         let streaming = false;
         let frameInterval;
-        let lastFrameData = null;
-        let frameQueue = [];
-        let batchTimer = null;
         
         // Performance tracking
         let framesSent = 0;
@@ -201,18 +200,6 @@
         let bytesTransferred = 0;
         let fpsCounter = 0;
         let lastFpsUpdate = Date.now();
-
-        // Check WebP support
-        const supportsWebP = (() => {
-            const canvas = document.createElement('canvas');
-            canvas.width = canvas.height = 1;
-            return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
-        })();
-        
-        if (!supportsWebP) {
-            useWebPCheck.disabled = true;
-            useWebPCheck.parentElement.style.opacity = '0.5';
-        }
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
@@ -228,7 +215,7 @@
                     video: { 
                         width: { max: maxRes === 480 ? 854 : maxRes === 720 ? 1280 : maxRes === 1080 ? 1920 : 2560 }, 
                         height: { max: maxRes },
-                        frameRate: { ideal: 60, max: 60 }
+                        frameRate: { ideal: 240, max: 240 }
                     },
                     audio: false // Disable audio for better performance
                 });
@@ -285,34 +272,12 @@
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
                     const quality = parseFloat(qualitySelect.value);
-                    const format = useWebPCheck.checked && supportsWebP ? 'webp' : 'jpeg';
-                    const frameData = canvas.toDataURL(`image/${format}`, quality);
+                    const frameData = canvas.toDataURL('image/webp', quality);
                     
-                    // Skip unchanged frames if enabled
-                    if (skipUnchangedCheck.checked && lastFrameData === frameData) {
-                        framesSkipped++;
-                        return;
-                    }
-                    
-                    lastFrameData = frameData;
-                    
-                    if (batchFramesCheck.checked) {
-                        // Add to batch queue
-                        frameQueue.push({ streamId, frame: frameData, timestamp: Date.now() });
-                        
-                        // Process batch if queue is full or timer expires
-                        if (frameQueue.length >= 3) {
-                            processBatch();
-                        } else if (!batchTimer) {
-                            batchTimer = setTimeout(processBatch, 50); // Process batch after 50ms
-                        }
-                    } else {
-                        // Send immediately
-                        socket.emit('stream-frame', { streamId, frame: frameData, timestamp: Date.now() });
-                        framesSent++;
-                        bytesTransferred += frameData.length;
-                    }
-                    
+                    // Send frame immediately using WebP format
+                    socket.emit('stream-frame', { streamId, frame: frameData, timestamp: Date.now() });
+                    framesSent++;
+                    bytesTransferred += frameData.length;
                     fpsCounter++;
                 } catch (err) {
                     console.error('Frame capture error:', err);
@@ -321,25 +286,6 @@
             
             const fps = parseInt(fpsSelect.value);
             frameInterval = setInterval(captureFrame, fps);
-        }
-
-        function processBatch() {
-            if (frameQueue.length === 0) return;
-            
-            // Send the most recent frames from the batch
-            const framesToSend = frameQueue.slice(-2); // Send last 2 frames
-            socket.emit('stream-batch', { streamId, frames: framesToSend });
-            
-            framesSent += framesToSend.length;
-            framesToSend.forEach(frame => {
-                bytesTransferred += frame.frame.length;
-            });
-            
-            frameQueue = [];
-            if (batchTimer) {
-                clearTimeout(batchTimer);
-                batchTimer = null;
-            }
         }
 
         function updateStats() {
@@ -355,7 +301,6 @@
                 document.getElementById('actualFps').textContent = actualFps;
                 document.getElementById('dataRate').textContent = dataRate;
                 document.getElementById('framesSent').textContent = framesSent;
-                document.getElementById('framesSkipped').textContent = framesSkipped;
                 
                 fpsCounter = 0;
                 bytesTransferred = 0;
@@ -372,28 +317,16 @@
             if (frameInterval) {
                 clearInterval(frameInterval);
             }
-            if (batchTimer) {
-                clearTimeout(batchTimer);
-                batchTimer = null;
-            }
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
             socket.emit('stop-stream', streamId);
-            
-            // Process any remaining frames in queue
-            if (frameQueue.length > 0) {
-                processBatch();
-            }
             
             streamStatus.textContent = 'Not streaming';
             streamStatus.className = 'stopped';
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
             statsDisplay.style.display = 'none';
-            
-            lastFrameData = null;
-            frameQueue = [];
         }
 
         socket.on('force-stop-stream', () => {
