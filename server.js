@@ -15,6 +15,7 @@ const adminIP = '68.102.150.181';
 let database = [];
 let uploadedFiles = [];
 let activeStreams = new Map(); // streamId -> { streamerSocketId, viewers: Set }
+let recordings = new Map(); // streamId -> { frames: [], startTime: Date }
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -68,6 +69,17 @@ io.on('connection', (socket) => {
     if (activeStreams.has(data.streamId)) {
       activeStreams.get(data.streamId).lastFrame = data.frame;
       socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
+          if (!recordings.has(data.streamId)) {
+      recordings.set(data.streamId, { frames: [], startTime: new Date() });
+    }
+    recordings.get(data.streamId).frames.push({
+      frame: data.frame,
+      timestamp: Date.now()
+    });
+    
+    socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
+  }
+});
     }
   });
 
