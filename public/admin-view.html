@@ -87,6 +87,7 @@
             <div id="streams-list" class="loading">Loading streams...</div>
         </div>
         
+        
         <div class="section">
             <h2>Text Submissions</h2>
             <div id="submissions-list" class="loading">Loading submissions...</div>
@@ -125,6 +126,21 @@
                 });
             }
         }
+        function endStream(streamId) {
+    if (confirm('Are you sure you want to end this stream?')) {
+        fetch(`/admin/streams/${streamId}/end`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Stream ended successfully');
+                loadData();
+            } else {
+                alert('Error ending stream');
+            }
+        });
+    }
+}
+
 
         function loadData() {
             fetch('/admin/data')
@@ -139,16 +155,19 @@
                         data.streams.forEach(stream => {
                             const streamDiv = document.createElement('div');
                             streamDiv.className = 'stream-item';
-                            streamDiv.innerHTML = `
-                                <div>
-                                    <strong>Stream ID:</strong> ${stream.id}
-                                    <span class="timestamp"> - Viewers: ${stream.viewers}</span>
-                                </div>
-                                <div style="margin-top: 10px;">
-                                    <a href="/stream/${stream.id}" class="view-btn" target="_blank">View Stream</a>
-                                    <span style="font-size: 12px; color: #666;">Share link: ${window.location.origin}/stream/${stream.id}</span>
-                                </div>
-                            `;
+                       streamDiv.innerHTML = `
+    <div>
+        <strong>Stream ID:</strong> ${stream.id}
+        <span class="timestamp"> - Viewers: ${stream.viewers}</span>
+    </div>
+    <div style="margin-top: 10px;">
+        <a href="/stream/${stream.id}" class="view-btn" target="_blank">View Stream</a>
+        <button onclick="endStream('${stream.id}')" class="delete-btn">End Stream</button>
+        <a href="/admin/recording/${stream.id}" class="download-btn">Download Recording</a>
+        <br>
+        <span style="font-size: 12px; color: #666;">Share link: ${window.location.origin}/stream/${stream.id}</span>
+    </div>
+`;
                             streamsList.appendChild(streamDiv);
                         });
                     }
