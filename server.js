@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const socketIo = require('socket.io');
+const ffmpeg = require('fluent-ffmpeg'); // You'll need to install this: npm install fluent-ffmpeg
 
 const app = express();
 const server = http.createServer(app);
@@ -14,12 +15,17 @@ const adminIP = '68.102.150.181';
 
 let database = [];
 let uploadedFiles = [];
-let activeStreams = new Map(); // streamId -> { streamerSocketId, viewers: Set, thumbnail, title, startTime }
-let recordings = new Map(); // streamId -> { frames: [], startTime: Date }
+let activeStreams = new Map();
+let recordings = new Map();
 
+// Create directories for uploads and recordings
 const uploadsDir = path.join(__dirname, 'uploads');
+const recordingsDir = path.join(__dirname, 'recordings');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
+}
+if (!fs.existsSync(recordingsDir)) {
+  fs.mkdirSync(recordingsDir);
 }
 
 const storage = multer.diskStorage({
@@ -57,11 +63,59 @@ const isAdmin = (req, res, next) => {
   }
 };
 
+// Function to convert base64 frames to MP4
+async function convertFramesToMP4(streamId, frames) {
+  const tempDir = path.join(recordingsDir, `temp_${streamId}`);
+  const outputFile = path.join(recordingsDir, `recording_${streamId}.mp4`);
+  
+  try {
+    // Create temp directory for frames
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir);
+    }
+    
+    // Save frames as individual images
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i];
+      const base64Data = frame.frame.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const framePath = path.join(tempDir, `frame_${String(i).padStart(6, '0')}.png`);
+      fs.writeFileSync(framePath, buffer);
+    }
+    
+    // Use ffmpeg to create MP4 from images
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(path.join(tempDir, 'frame_%06d.png'))
+        .inputFPS(30) // Adjust based on your stream FPS
+        .videoCodec('libx264')
+        .outputOptions(['-pix_fmt yuv420p', '-crf 23'])
+        .output(outputFile)
+        .on('end', () => {
+          // Clean up temp files
+          fs.rmSync(tempDir, { recursive: true, force: true });
+          resolve(outputFile);
+        })
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err);
+          // Clean up temp files even on error
+          if (fs.existsSync(tempDir)) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+          }
+          reject(err);
+        })
+        .run();
+    });
+  } catch (error) {
+    console.error('Error converting frames to MP4:', error);
+    throw error;
+  }
+}
+
 // Socket.IO for livestreaming
 io.on('connection', (socket) => {
-  // Updated to handle stream data object with thumbnail
   socket.on('start-stream', (streamData) => {
-    const streamId = streamData.streamId || streamData; // Support both old and new format
+    const streamId = streamData.streamId || streamData;
     const thumbnail = streamData.thumbnail || null;
     const title = streamData.streamTitle || `Stream ${streamId}`;
     const startTime = streamData.startTime || new Date().toISOString();
@@ -86,12 +140,20 @@ io.on('connection', (socket) => {
       activeStreams.get(data.streamId).lastFrame = data.frame;
       
       if (!recordings.has(data.streamId)) {
-        recordings.set(data.streamId, { frames: [], startTime: new Date() });
+        recordings.set(data.streamId, { 
+          frames: [], 
+          startTime: new Date(),
+          isRecording: true
+        });
       }
-      recordings.get(data.streamId).frames.push({
-        frame: data.frame,
-        timestamp: Date.now()
-      });
+      
+      // Only store frames if actively recording
+      if (recordings.get(data.streamId).isRecording) {
+        recordings.get(data.streamId).frames.push({
+          frame: data.frame,
+          timestamp: Date.now()
+        });
+      }
       
       socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
     }
@@ -102,7 +164,6 @@ io.on('connection', (socket) => {
       socket.join(`stream-${streamId}`);
       activeStreams.get(streamId).viewers.add(socket.id);
       
-      // Send last frame to new viewer
       const lastFrame = activeStreams.get(streamId).lastFrame;
       if (lastFrame) {
         socket.emit('stream-frame', lastFrame);
@@ -113,16 +174,21 @@ io.on('connection', (socket) => {
   socket.on('stop-stream', (streamId) => {
     if (activeStreams.has(streamId)) {
       activeStreams.delete(streamId);
-      // Keep recording for later download but mark as ended
       if (recordings.has(streamId)) {
         recordings.get(streamId).endTime = new Date();
+        recordings.get(streamId).isRecording = false;
       }
     }
   });
 
   socket.on('disconnect', () => {
     if (socket.streamId && activeStreams.has(socket.streamId)) {
-      activeStreams.delete(socket.streamId);
+      const streamId = socket.streamId;
+      activeStreams.delete(streamId);
+      if (recordings.has(streamId)) {
+        recordings.get(streamId).endTime = new Date();
+        recordings.get(streamId).isRecording = false;
+      }
     }
   });
 });
@@ -167,6 +233,44 @@ app.get('/stream/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
 
+// Updated recording download endpoint
+app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
+  const streamId = req.params.streamId;
+  
+  if (!recordings.has(streamId)) {
+    return res.status(404).json({ error: 'Recording not found' });
+  }
+  
+  const recording = recordings.get(streamId);
+  
+  if (recording.frames.length === 0) {
+    return res.status(404).json({ error: 'No frames recorded' });
+  }
+  
+  try {
+    // Check if MP4 file already exists
+    const mp4Path = path.join(recordingsDir, `recording_${streamId}.mp4`);
+    
+    if (!fs.existsSync(mp4Path)) {
+      // Convert frames to MP4
+      console.log(`Converting ${recording.frames.length} frames to MP4 for stream ${streamId}`);
+      await convertFramesToMP4(streamId, recording.frames);
+    }
+    
+    // Send the MP4 file for download
+    res.download(mp4Path, `stream_${streamId}_recording.mp4`, (err) => {
+      if (err) {
+        console.error('Download error:', err);
+        res.status(500).send('Error downloading file');
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error processing recording:', error);
+    res.status(500).json({ error: 'Error processing recording' });
+  }
+});
+
 app.get('/admin/download/:filename', isAdmin, (req, res) => {
   const filePath = path.join(__dirname, 'uploads', req.params.filename);
   if (fs.existsSync(filePath)) {
@@ -197,19 +301,16 @@ app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
     const stream = activeStreams.get(streamId);
     io.to(stream.streamerSocketId).emit('force-stop-stream');
     activeStreams.delete(streamId);
+    
+    // Mark recording as ended
+    if (recordings.has(streamId)) {
+      recordings.get(streamId).endTime = new Date();
+      recordings.get(streamId).isRecording = false;
+    }
+    
     res.json({ success: true });
   } else {
     res.json({ success: false });
-  }
-});
-
-app.get('/admin/recording/:streamId', isAdmin, (req, res) => {
-  const streamId = req.params.streamId;
-  if (recordings.has(streamId)) {
-    const recording = recordings.get(streamId);
-    res.json(recording);
-  } else {
-    res.status(404).json({ error: 'Recording not found' });
   }
 });
 
