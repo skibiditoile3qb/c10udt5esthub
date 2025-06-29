@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultra Fast User Panel</title>
+    <title>User Panel(share things)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -172,16 +172,9 @@
         </div>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Mock socket.io for demo purposes
-        const socket = {
-            emit: function(event, data) {
-                console.log('Socket emit:', event, data);
-            },
-            on: function(event, callback) {
-                console.log('Socket on:', event);
-            }
-        };
+        const socket = io();
 
         const streamStatus = document.getElementById('streamStatus');
         const startBtn = document.getElementById('startStream');
@@ -364,6 +357,7 @@
             stopStream();
         });
 
+        // Handle connection issues
         socket.on('connect_error', () => {
             streamStatus.textContent = 'Connection error - check internet';
             streamStatus.className = 'stopped';
