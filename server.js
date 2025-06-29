@@ -14,7 +14,7 @@ const adminIP = '68.102.150.181';
 
 let database = [];
 let uploadedFiles = [];
-let activeStreams = new Map(); // streamId -> { streamerSocketId, viewers: Set }
+let activeStreams = new Map(); // streamId -> { streamerSocketId, viewers: Set, thumbnail, title, startTime }
 let recordings = new Map(); // streamId -> { frames: [], startTime: Date }
 
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -59,10 +59,26 @@ const isAdmin = (req, res, next) => {
 
 // Socket.IO for livestreaming
 io.on('connection', (socket) => {
-  socket.on('start-stream', (streamId) => {
-    activeStreams.set(streamId, { streamerSocketId: socket.id, viewers: new Set(), lastFrame: null });
+  // Updated to handle stream data object with thumbnail
+  socket.on('start-stream', (streamData) => {
+    const streamId = streamData.streamId || streamData; // Support both old and new format
+    const thumbnail = streamData.thumbnail || null;
+    const title = streamData.streamTitle || `Stream ${streamId}`;
+    const startTime = streamData.startTime || new Date().toISOString();
+    
+    activeStreams.set(streamId, { 
+      streamerSocketId: socket.id, 
+      viewers: new Set(), 
+      lastFrame: null,
+      thumbnail: thumbnail,
+      title: title,
+      startTime: startTime
+    });
+    
     socket.join(`stream-${streamId}`);
     socket.streamId = streamId;
+    
+    console.log(`Stream started: ${streamId} with thumbnail: ${thumbnail ? 'Yes' : 'No'}`);
   });
 
   socket.on('stream-frame', (data) => {
@@ -129,10 +145,17 @@ app.get('/admin/view', isAdmin, (req, res) => {
 });
 
 app.get('/admin/data', isAdmin, (req, res) => {
-  const streams = Array.from(activeStreams.keys()).map(id => ({
-    id,
-    viewers: activeStreams.get(id).viewers.size
-  }));
+  const streams = Array.from(activeStreams.keys()).map(id => {
+    const streamData = activeStreams.get(id);
+    return {
+      id,
+      viewers: streamData.viewers.size,
+      thumbnail: streamData.thumbnail,
+      title: streamData.title,
+      startTime: streamData.startTime
+    };
+  });
+  
   res.json({
     submissions: database,
     files: uploadedFiles,
