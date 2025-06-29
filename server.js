@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const socketIo = require('socket.io');
-const ffmpeg = require('fluent-ffmpeg'); // You'll need to install this: npm install fluent-ffmpeg
+const ffmpeg = require('fluent-ffmpeg');
 
 const app = express();
 const server = http.createServer(app);
@@ -63,51 +63,166 @@ const isAdmin = (req, res, next) => {
   }
 };
 
-// Function to convert base64 frames to MP4
+// Check if FFmpeg is available
+function checkFFmpegAvailability() {
+  return new Promise((resolve, reject) => {
+    ffmpeg.getAvailableFormats((err, formats) => {
+      if (err) {
+        console.error('FFmpeg not available:', err.message);
+        reject(new Error('FFmpeg not installed or not in PATH'));
+      } else {
+        console.log('FFmpeg is available');
+        resolve(true);
+      }
+    });
+  });
+}
+
+// Function to convert base64 frames to MP4 with WebP support
 async function convertFramesToMP4(streamId, frames) {
   const tempDir = path.join(recordingsDir, `temp_${streamId}`);
   const outputFile = path.join(recordingsDir, `recording_${streamId}.mp4`);
   
   try {
-    // Create temp directory for frames
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir);
+    // Check if FFmpeg is available
+    await checkFFmpegAvailability();
+    
+    console.log(`Processing ${frames.length} frames for stream ${streamId}`);
+    
+    // Validate frames
+    if (!frames || frames.length === 0) {
+      throw new Error('No frames to process');
     }
     
-    // Save frames as individual images
+    // Create temp directory for frames
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    let validFrameCount = 0;
+    let frameFormat = null;
+    
+    // Save frames as individual images with validation
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
-      const base64Data = frame.frame.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const framePath = path.join(tempDir, `frame_${String(i).padStart(6, '0')}.png`);
-      fs.writeFileSync(framePath, buffer);
+      
+      if (!frame || !frame.frame) {
+        console.warn(`Frame ${i} is invalid, skipping`);
+        continue;
+      }
+      
+      try {
+        // Check if it's a valid base64 image (supports WebP, PNG, JPEG)
+        const base64Match = frame.frame.match(/^data:image\/(\w+);base64,(.+)$/);
+        if (!base64Match) {
+          console.warn(`Frame ${i} is not a valid base64 image, skipping`);
+          continue;
+        }
+        
+        const imageFormat = base64Match[1]; // webp, png, jpeg, etc.
+        const base64Data = base64Match[2];
+        
+        // Set frame format from first valid frame
+        if (!frameFormat) {
+          frameFormat = imageFormat;
+          console.log(`Detected frame format: ${frameFormat}`);
+        }
+        
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        if (buffer.length === 0) {
+          console.warn(`Frame ${i} has empty buffer, skipping`);
+          continue;
+        }
+        
+        // Use appropriate file extension based on format
+        const fileExtension = imageFormat === 'webp' ? 'webp' : imageFormat === 'jpeg' ? 'jpg' : 'png';
+        const framePath = path.join(tempDir, `frame_${String(validFrameCount).padStart(6, '0')}.${fileExtension}`);
+        fs.writeFileSync(framePath, buffer);
+        validFrameCount++;
+        
+      } catch (frameError) {
+        console.error(`Error processing frame ${i}:`, frameError.message);
+        continue;
+      }
     }
+    
+    if (validFrameCount === 0) {
+      throw new Error('No valid frames found to process');
+    }
+    
+    console.log(`Successfully saved ${validFrameCount} valid frames in ${frameFormat} format`);
     
     // Use ffmpeg to create MP4 from images
     return new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(path.join(tempDir, 'frame_%06d.png'))
-        .inputFPS(30) // Adjust based on your stream FPS
+      // Determine the input pattern based on the frame format
+      const fileExtension = frameFormat === 'webp' ? 'webp' : frameFormat === 'jpeg' ? 'jpg' : 'png';
+      const inputPattern = path.join(tempDir, `frame_%06d.${fileExtension}`);
+      
+      console.log(`Using input pattern: ${inputPattern}`);
+      
+      const command = ffmpeg()
+        .input(inputPattern)
+        .inputFPS(10) // Adjusted FPS for better compatibility
         .videoCodec('libx264')
-        .outputOptions(['-pix_fmt yuv420p', '-crf 23'])
-        .output(outputFile)
+        .outputOptions([
+          '-pix_fmt yuv420p',
+          '-crf 23',
+          '-preset fast',
+          '-movflags +faststart'
+        ])
+        .output(outputFile);
+      
+      command
+        .on('start', (commandLine) => {
+          console.log('FFmpeg command:', commandLine);
+        })
+        .on('progress', (progress) => {
+          if (progress.percent) {
+            console.log('Processing: ' + Math.round(progress.percent) + '% done');
+          }
+        })
         .on('end', () => {
+          console.log(`MP4 creation completed: ${outputFile}`);
           // Clean up temp files
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          try {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+            console.log('Temp files cleaned up');
+          } catch (cleanupError) {
+            console.warn('Error cleaning up temp files:', cleanupError.message);
+          }
           resolve(outputFile);
         })
         .on('error', (err) => {
-          console.error('FFmpeg error:', err);
+          console.error('FFmpeg error:', err.message);
+          console.error('FFmpeg stderr:', err.stderr || 'No stderr available');
+          
           // Clean up temp files even on error
-          if (fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
+          try {
+            if (fs.existsSync(tempDir)) {
+              fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+          } catch (cleanupError) {
+            console.warn('Error cleaning up temp files after error:', cleanupError.message);
           }
-          reject(err);
+          
+          reject(new Error(`FFmpeg processing failed: ${err.message}`));
         })
         .run();
     });
+    
   } catch (error) {
-    console.error('Error converting frames to MP4:', error);
+    console.error('Error in convertFramesToMP4:', error.message);
+    
+    // Clean up temp directory if it exists
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      console.warn('Error cleaning up after error:', cleanupError.message);
+    }
+    
     throw error;
   }
 }
@@ -151,8 +266,14 @@ io.on('connection', (socket) => {
       if (recordings.get(data.streamId).isRecording) {
         recordings.get(data.streamId).frames.push({
           frame: data.frame,
-          timestamp: Date.now()
+          timestamp: data.timestamp || Date.now()
         });
+        
+        // Limit recording buffer to prevent memory issues (keep last 30000 frames)
+        const recording = recordings.get(data.streamId);
+        if (recording.frames.length > 30000) {
+          recording.frames = recording.frames.slice(-30000);
+        }
       }
       
       socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
@@ -233,41 +354,79 @@ app.get('/stream/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
 
-// Updated recording download endpoint
+// Updated recording download endpoint with WebP support
 app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
   const streamId = req.params.streamId;
   
+  console.log(`Recording request for stream: ${streamId}`);
+  
   if (!recordings.has(streamId)) {
+    console.log(`Recording not found for stream: ${streamId}`);
     return res.status(404).json({ error: 'Recording not found' });
   }
   
   const recording = recordings.get(streamId);
   
-  if (recording.frames.length === 0) {
+  if (!recording.frames || recording.frames.length === 0) {
+    console.log(`No frames recorded for stream: ${streamId}`);
     return res.status(404).json({ error: 'No frames recorded' });
   }
   
+  console.log(`Found ${recording.frames.length} frames for stream: ${streamId}`);
+  
   try {
-    // Check if MP4 file already exists
     const mp4Path = path.join(recordingsDir, `recording_${streamId}.mp4`);
     
-    if (!fs.existsSync(mp4Path)) {
-      // Convert frames to MP4
-      console.log(`Converting ${recording.frames.length} frames to MP4 for stream ${streamId}`);
-      await convertFramesToMP4(streamId, recording.frames);
+    // Check if MP4 file already exists and is valid
+    if (fs.existsSync(mp4Path)) {
+      const stats = fs.statSync(mp4Path);
+      if (stats.size > 0) {
+        console.log(`Using existing MP4 file: ${mp4Path}`);
+        return res.download(mp4Path, `stream_${streamId}_recording.mp4`);
+      } else {
+        console.log(`Existing MP4 file is empty, regenerating: ${mp4Path}`);
+        fs.unlinkSync(mp4Path);
+      }
     }
+    
+    // Convert frames to MP4
+    console.log(`Converting ${recording.frames.length} frames to MP4 for stream ${streamId}`);
+    await convertFramesToMP4(streamId, recording.frames);
+    
+    // Verify the output file exists and has content
+    if (!fs.existsSync(mp4Path)) {
+      throw new Error('MP4 file was not created');
+    }
+    
+    const stats = fs.statSync(mp4Path);
+    if (stats.size === 0) {
+      throw new Error('MP4 file is empty');
+    }
+    
+    console.log(`MP4 file created successfully: ${mp4Path} (${stats.size} bytes)`);
     
     // Send the MP4 file for download
     res.download(mp4Path, `stream_${streamId}_recording.mp4`, (err) => {
       if (err) {
         console.error('Download error:', err);
-        res.status(500).send('Error downloading file');
+        if (!res.headersSent) {
+          res.status(500).send('Error downloading file');
+        }
       }
     });
     
   } catch (error) {
-    console.error('Error processing recording:', error);
-    res.status(500).json({ error: 'Error processing recording' });
+    console.error('Error processing recording for stream', streamId, ':', error.message);
+    console.error('Stack trace:', error.stack);
+    
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Error processing recording',
+        details: error.message,
+        streamId: streamId,
+        frameCount: recording.frames ? recording.frames.length : 0
+      });
+    }
   }
 });
 
@@ -341,4 +500,8 @@ app.set('trust proxy', true);
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${port}`);
+  console.log('Checking FFmpeg availability...');
+  checkFFmpegAvailability()
+    .then(() => console.log('FFmpeg check passed'))
+    .catch(err => console.error('FFmpeg check failed:', err.message));
 });
