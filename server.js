@@ -95,12 +95,15 @@ io.on('connection', (socket) => {
       }
     }
   });
-
-  socket.on('stop-stream', (streamId) => {
-    if (activeStreams.has(streamId)) {
-      activeStreams.delete(streamId);
+socket.on('stop-stream', (streamId) => {
+  if (activeStreams.has(streamId)) {
+    activeStreams.delete(streamId);
+    // Keep recording for later download but mark as ended
+    if (recordings.has(streamId)) {
+      recordings.get(streamId).endTime = new Date();
     }
-  });
+  }
+});
 
   socket.on('disconnect', () => {
     if (socket.streamId && activeStreams.has(socket.streamId)) {
