@@ -10,8 +10,8 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const port = process.env.PORT || 3000;
-
 const adminIP = '68.102.150.181';
+
 let database = [];
 let uploadedFiles = [];
 let activeStreams = new Map(); // streamId -> { streamerSocketId, viewers: Set }
@@ -68,18 +68,16 @@ io.on('connection', (socket) => {
   socket.on('stream-frame', (data) => {
     if (activeStreams.has(data.streamId)) {
       activeStreams.get(data.streamId).lastFrame = data.frame;
+      
+      if (!recordings.has(data.streamId)) {
+        recordings.set(data.streamId, { frames: [], startTime: new Date() });
+      }
+      recordings.get(data.streamId).frames.push({
+        frame: data.frame,
+        timestamp: Date.now()
+      });
+      
       socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
-          if (!recordings.has(data.streamId)) {
-      recordings.set(data.streamId, { frames: [], startTime: new Date() });
-    }
-    recordings.get(data.streamId).frames.push({
-      frame: data.frame,
-      timestamp: Date.now()
-    });
-    
-    socket.to(`stream-${data.streamId}`).emit('stream-frame', data.frame);
-  }
-});
     }
   });
 
@@ -95,15 +93,16 @@ io.on('connection', (socket) => {
       }
     }
   });
-socket.on('stop-stream', (streamId) => {
-  if (activeStreams.has(streamId)) {
-    activeStreams.delete(streamId);
-    // Keep recording for later download but mark as ended
-    if (recordings.has(streamId)) {
-      recordings.get(streamId).endTime = new Date();
+
+  socket.on('stop-stream', (streamId) => {
+    if (activeStreams.has(streamId)) {
+      activeStreams.delete(streamId);
+      // Keep recording for later download but mark as ended
+      if (recordings.has(streamId)) {
+        recordings.get(streamId).endTime = new Date();
+      }
     }
-  }
-});
+  });
 
   socket.on('disconnect', () => {
     if (socket.streamId && activeStreams.has(socket.streamId)) {
@@ -169,13 +168,7 @@ app.get('/user', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
-app.post('/submit', upload.single('file'), (req, res) => {
-  const submission = {
-    info: req.body.info,
-    timestamp: new Date().toISOString(),
-    ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress
-  };
-  app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
+app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
   const streamId = req.params.streamId;
   if (activeStreams.has(streamId)) {
     const stream = activeStreams.get(streamId);
@@ -196,6 +189,13 @@ app.get('/admin/recording/:streamId', isAdmin, (req, res) => {
     res.status(404).json({ error: 'Recording not found' });
   }
 });
+
+app.post('/submit', upload.single('file'), (req, res) => {
+  const submission = {
+    info: req.body.info,
+    timestamp: new Date().toISOString(),
+    ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress
+  };
   
   if (req.file) {
     const fileInfo = {
