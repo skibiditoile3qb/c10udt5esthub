@@ -179,6 +179,10 @@
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
         }
+        socket.on('force-stop-stream', () => {
+    alert('Stream ended by administrator');
+    stopStream();
+});
     </script>
 </body>
 </html>
