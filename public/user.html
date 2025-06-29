@@ -154,10 +154,10 @@
                     if (!streaming) return;
                     
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const frame = canvas.toDataURL('image/jpeg', 0.5);
+                    const frame = canvas.toDataURL('image/jpeg', 0.7);
                     socket.emit('stream-frame', { streamId, frame });
                     
-                    setTimeout(streamFrames, 100); // 10 FPS
+                    setTimeout(streamFrames, 33); // 30 FPS
                 }
                 
             } catch (err) {
