@@ -172,6 +172,27 @@ app.post('/submit', upload.single('file'), (req, res) => {
     timestamp: new Date().toISOString(),
     ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress
   };
+  app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
+  const streamId = req.params.streamId;
+  if (activeStreams.has(streamId)) {
+    const stream = activeStreams.get(streamId);
+    io.to(stream.streamerSocketId).emit('force-stop-stream');
+    activeStreams.delete(streamId);
+    res.json({ success: true });
+  } else {
+    res.json({ success: false });
+  }
+});
+
+app.get('/admin/recording/:streamId', isAdmin, (req, res) => {
+  const streamId = req.params.streamId;
+  if (recordings.has(streamId)) {
+    const recording = recordings.get(streamId);
+    res.json(recording);
+  } else {
+    res.status(404).json({ error: 'Recording not found' });
+  }
+});
   
   if (req.file) {
     const fileInfo = {
