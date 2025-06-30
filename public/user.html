@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Panel - Optimized</title>
+    <title>User Panel - Enhanced with Camera & Audio</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -31,7 +31,7 @@
             font-weight: bold;
             color: #555;
         }
-        textarea, input[type="file"] {
+        textarea, input[type="file"], select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -73,6 +73,54 @@
         }
         .streaming { background-color: #d4edda; color: #155724; }
         .stopped { background-color: #f8d7da; color: #721c24; }
+        .media-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .media-group {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .media-group h3 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 14px;
+        }
+        .device-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+            background-color: white;
+        }
+        .device-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .device-item:hover {
+            background-color: #f8f9fa;
+        }
+        .device-item:last-child {
+            border-bottom: none;
+        }
+        .device-item input[type="radio"] {
+            margin-right: 8px;
+        }
+        .device-item label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+            font-size: 13px;
+        }
         .performance-controls {
             margin: 10px 0;
             text-align: center;
@@ -82,8 +130,10 @@
             margin-right: 10px;
         }
         .performance-controls select {
+            width: auto;
             padding: 5px;
             border-radius: 3px;
+            margin-right: 15px;
         }
         .stats {
             background-color: #f8f9fa;
@@ -92,18 +142,41 @@
             margin: 10px 0;
             font-size: 12px;
         }
-        .optimization-controls {
-            margin: 10px 0;
+        .preview-container {
+            display: none;
+            margin: 15px 0;
             text-align: center;
         }
-        .optimization-controls input[type="checkbox"] {
-            margin-right: 5px;
+        .preview-video {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            border: 2px solid #007bff;
+        }
+        .audio-levels {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .audio-level-bar {
+            flex: 1;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 10px;
+        }
+        .audio-level-fill {
+            height: 100%;
+            background: linear-gradient(to right, #28a745, #ffc107, #dc3545);
+            width: 0%;
+            transition: width 0.1s ease;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>User Panel - Optimized</h1>
+        <h1>Enhanced Streaming Panel</h1>
         
         <div id="success-message" class="success-message" style="display: none;">
             Your submission has been uploaded successfully!
@@ -124,7 +197,7 @@
         </form>
 
         <div class="stream-section">
-            <h2>High-Performance Screen Share</h2>
+            <h2>Multi-Source Live Stream</h2>
             
             <div class="form-group">
                 <label for="thumbnail">Stream Thumbnail (optional):</label>
@@ -135,6 +208,66 @@
                         <button type="button" id="removeThumbnail" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Remove</button>
                     </div>
                 </div>
+            </div>
+
+            <div class="media-controls">
+                <div class="media-group">
+                    <h3>📹 Video Sources</h3>
+                    <div>
+                        <label>
+                            <input type="radio" name="videoSource" value="screen" checked> Screen Share
+                        </label>
+                    </div>
+                    <div>
+                        <label>
+                            <input type="radio" name="videoSource" value="camera"> Camera
+                        </label>
+                    </div>
+                    <div>
+                        <label>
+                            <input type="radio" name="videoSource" value="both"> Screen + Camera
+                        </label>
+                    </div>
+                    
+                    <div id="cameraDevices" class="device-list" style="display: none;">
+                        <div class="device-item">
+                            <span>🔍 Scanning for cameras...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="media-group">
+                    <h3>🎤 Audio Sources</h3>
+                    <div>
+                        <label>
+                            <input type="checkbox" id="enableMicrophone"> Microphone
+                        </label>
+                    </div>
+                    <div>
+                        <label>
+                            <input type="checkbox" id="enableSystemAudio"> System Audio
+                        </label>
+                    </div>
+                    
+                    <div id="microphoneDevices" class="device-list" style="display: none;">
+                        <div class="device-item">
+                            <span>🔍 Scanning for microphones...</span>
+                        </div>
+                    </div>
+
+                    <div class="audio-levels" style="display: none;" id="audioLevels">
+                        <span style="font-size: 12px;">🎤</span>
+                        <div class="audio-level-bar">
+                            <div class="audio-level-fill" id="micLevelFill"></div>
+                        </div>
+                        <span style="font-size: 12px;">🔊</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="preview-container" id="previewContainer">
+                <h3>Preview</h3>
+                <video id="previewVideo" class="preview-video" muted autoplay></video>
             </div>
             
             <div class="performance-controls">
@@ -174,16 +307,15 @@
                 </select>
             </div>
             
-
-            
             <div id="streamStatus" class="stopped">Not streaming</div>
             <div id="statsDisplay" class="stats" style="display: none;">
                 FPS: <span id="actualFps">0</span> | 
                 Data Rate: <span id="dataRate">0</span> KB/s | 
-                Frames Sent: <span id="framesSent">0</span>
+                Frames Sent: <span id="framesSent">0</span> |
+                Audio: <span id="audioStatus">Disabled</span>
             </div>
             
-            <button id="startStream">Start High-Speed Stream</button>
+            <button id="startStream">Start Enhanced Stream</button>
             <button id="stopStream" style="display:none;">Stop Stream</button>
         </div>
     </div>
@@ -202,26 +334,200 @@
         const thumbnailPreview = document.getElementById('thumbnailPreview');
         const thumbnailImg = document.getElementById('thumbnailImg');
         const removeThumbnailBtn = document.getElementById('removeThumbnail');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewVideo = document.getElementById('previewVideo');
+        const audioLevels = document.getElementById('audioLevels');
+        const micLevelFill = document.getElementById('micLevelFill');
         
         let localStream;
+        let screenStream;
+        let cameraStream;
+        let audioStream;
+        let systemAudioStream;
         let streamId;
         let streaming = false;
         let frameInterval;
         let thumbnailData = null;
+        let audioContext;
+        let micAnalyser;
+        let selectedCamera = null;
+        let selectedMicrophone = null;
         
         // Performance tracking
         let framesSent = 0;
-        let framesSkipped = 0;
-        let lastStatsUpdate = Date.now();
         let bytesTransferred = 0;
         let fpsCounter = 0;
         let lastFpsUpdate = Date.now();
+
+        // Device scanning
+        async function scanForDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                const microphones = devices.filter(device => device.kind === 'audioinput');
+                
+                populateDeviceList('cameraDevices', cameras, 'camera');
+                populateDeviceList('microphoneDevices', microphones, 'microphone');
+                
+                console.log(`Found ${cameras.length} cameras and ${microphones.length} microphones`);
+                
+            } catch (error) {
+                console.error('Error scanning devices:', error);
+            }
+        }
+
+        function populateDeviceList(containerId, devices, type) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (devices.length === 0) {
+                container.innerHTML = '<div class="device-item"><span>No devices found</span></div>';
+                return;
+            }
+            
+            devices.forEach((device, index) => {
+                const deviceItem = document.createElement('div');
+                deviceItem.className = 'device-item';
+                
+                const radioId = `${type}_${device.deviceId}`;
+                const deviceName = device.label || `${type} ${index + 1}`;
+                
+                deviceItem.innerHTML = `
+                    <input type="radio" name="${type}Device" value="${device.deviceId}" id="${radioId}" ${index === 0 ? 'checked' : ''}>
+                    <label for="${radioId}">${deviceName}</label>
+                `;
+                
+                container.appendChild(deviceItem);
+                
+                if (index === 0) {
+                    if (type === 'camera') selectedCamera = device.deviceId;
+                    if (type === 'microphone') selectedMicrophone = device.deviceId;
+                }
+            });
+            
+            // Add event listeners for device selection
+            container.addEventListener('change', (e) => {
+                if (e.target.type === 'radio') {
+                    if (type === 'camera') selectedCamera = e.target.value;
+                    if (type === 'microphone') selectedMicrophone = e.target.value;
+                    updatePreview();
+                }
+            });
+        }
+
+        // Audio level monitoring
+        function startAudioMonitoring(stream) {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            const source = audioContext.createMediaStreamSource(stream);
+            micAnalyser = audioContext.createAnalyser();
+            micAnalyser.fftSize = 256;
+            source.connect(micAnalyser);
+            
+            const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+            
+            function updateAudioLevel() {
+                if (!streaming) return;
+                
+                micAnalyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+                const percentage = (average / 255) * 100;
+                micLevelFill.style.width = percentage + '%';
+                
+                requestAnimationFrame(updateAudioLevel);
+            }
+            
+            updateAudioLevel();
+        }
+
+        // Update preview based on selected sources
+        async function updatePreview() {
+            const videoSource = document.querySelector('input[name="videoSource"]:checked').value;
+            const enableMic = document.getElementById('enableMicrophone').checked;
+            const enableSystemAudio = document.getElementById('enableSystemAudio').checked;
+            
+            try {
+                // Stop existing streams
+                if (previewVideo.srcObject) {
+                    previewVideo.srcObject.getTracks().forEach(track => track.stop());
+                }
+                
+                let combinedStream = new MediaStream();
+                
+                // Handle video sources
+                if (videoSource === 'screen' || videoSource === 'both') {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { frameRate: { ideal: 30 } },
+                        audio: enableSystemAudio
+                    });
+                    
+                    screenStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+                    if (enableSystemAudio) {
+                        screenStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+                    }
+                }
+                
+                if (videoSource === 'camera' || videoSource === 'both') {
+                    const constraints = {
+                        video: selectedCamera ? { deviceId: selectedCamera } : true,
+                        audio: false // We'll handle audio separately
+                    };
+                    
+                    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    cameraStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+                }
+                
+                // Handle microphone
+                if (enableMic && selectedMicrophone) {
+                    const micConstraints = {
+                        audio: { deviceId: selectedMicrophone },
+                        video: false
+                    };
+                    
+                    audioStream = await navigator.mediaDevices.getUserMedia(micConstraints);
+                    audioStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+                    
+                    startAudioMonitoring(audioStream);
+                    audioLevels.style.display = 'flex';
+                }
+                
+                if (combinedStream.getTracks().length > 0) {
+                    previewVideo.srcObject = combinedStream;
+                    previewContainer.style.display = 'block';
+                } else {
+                    previewContainer.style.display = 'none';
+                }
+                
+            } catch (error) {
+                console.error('Error updating preview:', error);
+                alert('Error accessing media devices: ' + error.message);
+            }
+        }
+
+        // Event listeners for source changes
+        document.querySelectorAll('input[name="videoSource"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const cameraDevices = document.getElementById('cameraDevices');
+                cameraDevices.style.display = radio.value.includes('camera') ? 'block' : 'none';
+                updatePreview();
+            });
+        });
+
+        document.getElementById('enableMicrophone').addEventListener('change', (e) => {
+            const micDevices = document.getElementById('microphoneDevices');
+            micDevices.style.display = e.target.checked ? 'block' : 'none';
+            updatePreview();
+        });
+
+        document.getElementById('enableSystemAudio').addEventListener('change', updatePreview);
 
         // Thumbnail handling
         thumbnailInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                // Check file size (limit to 5MB)
                 if (file.size > 5 * 1024 * 1024) {
                     alert('Thumbnail file size must be less than 5MB');
                     thumbnailInput.value = '';
@@ -244,34 +550,44 @@
             thumbnailPreview.style.display = 'none';
         });
 
+        // Initialize
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === '1') {
             document.getElementById('success-message').style.display = 'block';
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
+        // Scan for devices on load
+        scanForDevices();
+
+        // Request permissions on first interaction
+        document.addEventListener('click', async () => {
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                scanForDevices(); // Re-scan to get device labels
+            } catch (error) {
+                console.log('Permission not granted yet');
+            }
+        }, { once: true });
+
         startBtn.onclick = async () => {
             try {
-                const maxRes = parseInt(resolutionSelect.value);
+                await updatePreview(); // Ensure we have the latest stream
                 
-                localStream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: { 
-                        width: { max: maxRes === 480 ? 854 : maxRes === 720 ? 1280 : maxRes === 1080 ? 1920 : 2560 }, 
-                        height: { max: maxRes },
-                        frameRate: { ideal: 240, max: 240 }
-                    },
-                    audio: false // Disable audio for better performance
-                });
+                if (!previewVideo.srcObject) {
+                    alert('Please select at least one media source');
+                    return;
+                }
                 
+                localStream = previewVideo.srcObject;
                 streamId = Date.now().toString();
                 streaming = true;
                 framesSent = 0;
-                framesSkipped = 0;
                 bytesTransferred = 0;
                 
                 const video = document.createElement('video');
                 video.srcObject = localStream;
-                video.muted = true; // Ensure muted for autoplay
+                video.muted = true;
                 video.play();
                 
                 const canvas = document.createElement('canvas');
@@ -287,28 +603,42 @@
                     canvas.width = Math.floor(video.videoWidth * scale);
                     canvas.height = Math.floor(video.videoHeight * scale);
                     
+                    const audioTracks = localStream.getAudioTracks();
+                    const hasAudio = audioTracks.length > 0;
+                    
                     socket.emit('start-stream', { 
                         streamId, 
                         thumbnail: thumbnailData,
-                        streamTitle: `Stream ${streamId}`,
-                        startTime: new Date().toISOString()
+                        streamTitle: `Enhanced Stream ${streamId}`,
+                        startTime: new Date().toISOString(),
+                        hasAudio: hasAudio,
+                        audioTrackCount: audioTracks.length
                     });
+                    
                     startOptimizedCapture(video, canvas, ctx);
+                    
+                    if (hasAudio) {
+                        startAudioStreaming(localStream);
+                    }
                 };
                 
-                streamStatus.textContent = `High-Speed Streaming (ID: ${streamId})`;
+                streamStatus.textContent = `Multi-Source Streaming (ID: ${streamId})`;
                 streamStatus.className = 'streaming';
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
                 statsDisplay.style.display = 'block';
                 
-                localStream.getVideoTracks()[0].onended = stopStream;
+                document.getElementById('audioStatus').textContent = 
+                    localStream.getAudioTracks().length > 0 ? 'Enabled' : 'Disabled';
                 
-                // Start stats updates
+                localStream.getTracks().forEach(track => {
+                    track.onended = stopStream;
+                });
+                
                 updateStats();
                 
             } catch (err) {
-                alert('Error accessing screen: ' + err.message);
+                alert('Error starting stream: ' + err.message);
             }
         };
 
@@ -322,8 +652,12 @@
                     const quality = parseFloat(qualitySelect.value);
                     const frameData = canvas.toDataURL('image/webp', quality);
                     
-                    // Send frame immediately using WebP format
-                    socket.emit('stream-frame', { streamId, frame: frameData, timestamp: Date.now() });
+                    socket.emit('stream-frame', { 
+                        streamId, 
+                        frame: frameData, 
+                        timestamp: Date.now() 
+                    });
+                    
                     framesSent++;
                     bytesTransferred += frameData.length;
                     fpsCounter++;
@@ -334,6 +668,15 @@
             
             const fps = parseInt(fpsSelect.value);
             frameInterval = setInterval(captureFrame, fps);
+        }
+
+        function startAudioStreaming(stream) {
+            const audioTracks = stream.getAudioTracks();
+            if (audioTracks.length === 0) return;
+            
+            // Note: Audio streaming would require additional server-side handling
+            // This is a placeholder for audio data transmission
+            console.log(`Audio streaming started with ${audioTracks.length} tracks`);
         }
 
         function updateStats() {
@@ -368,6 +711,23 @@
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
+            if (systemAudioStream) {
+                systemAudioStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
             socket.emit('stop-stream', streamId);
             
             streamStatus.textContent = 'Not streaming';
@@ -375,6 +735,8 @@
             startBtn.style.display = 'block';
             stopBtn.style.display = 'none';
             statsDisplay.style.display = 'none';
+            previewContainer.style.display = 'none';
+            audioLevels.style.display = 'none';
         }
 
         socket.on('force-stop-stream', () => {
@@ -382,17 +744,14 @@
             stopStream();
         });
 
-        // Handle connection issues with retry
         socket.on('connect_error', () => {
             streamStatus.textContent = 'Connection error - retrying...';
             streamStatus.className = 'stopped';
             setTimeout(() => socket.connect(), 2000);
         });
 
-        // Optimize settings based on connection
         socket.on('connection-quality', (quality) => {
             if (quality === 'poor' && streaming) {
-                // Auto-adjust for poor connection
                 qualitySelect.value = '0.3';
                 resolutionSelect.value = '480';
                 fpsSelect.value = '100';
