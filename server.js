@@ -78,8 +78,8 @@ function checkFFmpegAvailability() {
   });
 }
 
-// Function to convert base64 frames to MP4 with WebP support
-async function convertFramesToMP4(streamId, frames) {
+// Enhanced function to convert frames and audio to MP4
+async function convertFramesAndAudioToMP4(streamId, frames, audioChunks = []) {
   const tempDir = path.join(recordingsDir, `temp_${streamId}`);
   const outputFile = path.join(recordingsDir, `recording_${streamId}.mp4`);
   
@@ -87,7 +87,7 @@ async function convertFramesToMP4(streamId, frames) {
     // Check if FFmpeg is available
     await checkFFmpegAvailability();
     
-    console.log(`Processing ${frames.length} frames for stream ${streamId}`);
+    console.log(`Processing ${frames.length} frames and ${audioChunks.length} audio chunks for stream ${streamId}`);
     
     // Validate frames
     if (!frames || frames.length === 0) {
@@ -153,13 +153,29 @@ async function convertFramesToMP4(streamId, frames) {
     
     console.log(`Successfully saved ${validFrameCount} valid frames in ${frameFormat} format`);
     
-    // Use ffmpeg to create MP4 from images
+    // Process audio chunks if available
+    let audioFilePath = null;
+    if (audioChunks && audioChunks.length > 0) {
+      audioFilePath = path.join(tempDir, 'audio.wav');
+      console.log(`Processing ${audioChunks.length} audio chunks`);
+      
+      try {
+        await combineAudioChunks(audioChunks, audioFilePath);
+        console.log(`Audio file created: ${audioFilePath}`);
+      } catch (audioError) {
+        console.warn('Error processing audio, continuing with video only:', audioError.message);
+        audioFilePath = null;
+      }
+    }
+    
+    // Use ffmpeg to create MP4 from images and audio
     return new Promise((resolve, reject) => {
       // Determine the input pattern based on the frame format
       const fileExtension = frameFormat === 'webp' ? 'webp' : frameFormat === 'jpeg' ? 'jpg' : 'png';
       const inputPattern = path.join(tempDir, `frame_%06d.${fileExtension}`);
       
       console.log(`Using input pattern: ${inputPattern}`);
+      console.log(`Audio file: ${audioFilePath || 'None'}`);
       
       const command = ffmpeg()
         .input(inputPattern)
@@ -170,8 +186,24 @@ async function convertFramesToMP4(streamId, frames) {
           '-crf 23',
           '-preset fast',
           '-movflags +faststart'
-        ])
-        .output(outputFile);
+        ]);
+      
+      // Add audio input if available
+      if (audioFilePath && fs.existsSync(audioFilePath)) {
+        command.input(audioFilePath);
+        command.audioCodec('aac');
+        command.outputOptions([
+          '-c:a aac',
+          '-b:a 128k',
+          '-ac 2',
+          '-ar 44100'
+        ]);
+        console.log('Audio track will be included in output');
+      } else {
+        console.log('No audio track - creating video-only output');
+      }
+      
+      command.output(outputFile);
       
       command
         .on('start', (commandLine) => {
@@ -212,7 +244,7 @@ async function convertFramesToMP4(streamId, frames) {
     });
     
   } catch (error) {
-    console.error('Error in convertFramesToMP4:', error.message);
+    console.error('Error in convertFramesAndAudioToMP4:', error.message);
     
     // Clean up temp directory if it exists
     try {
@@ -227,13 +259,114 @@ async function convertFramesToMP4(streamId, frames) {
   }
 }
 
-// Updated Socket.IO for livestreaming with improved frame capture
+// Function to combine audio chunks into a single WAV file
+async function combineAudioChunks(audioChunks, outputPath) {
+  return new Promise((resolve, reject) => {
+    if (!audioChunks || audioChunks.length === 0) {
+      reject(new Error('No audio chunks to process'));
+      return;
+    }
+    
+    // Create temporary files for each audio chunk
+    const tempAudioFiles = [];
+    const tempDir = path.dirname(outputPath);
+    
+    try {
+      // Save each audio chunk as a temporary file
+      audioChunks.forEach((chunk, index) => {
+        if (chunk.data) {
+          const tempFile = path.join(tempDir, `temp_audio_${index}.wav`);
+          
+          // Handle different audio data formats
+          let audioBuffer;
+          if (chunk.data.startsWith('data:audio/wav;base64,')) {
+            // Base64 encoded WAV
+            const base64Data = chunk.data.split(',')[1];
+            audioBuffer = Buffer.from(base64Data, 'base64');
+          } else if (Buffer.isBuffer(chunk.data)) {
+            // Raw buffer
+            audioBuffer = chunk.data;
+          } else {
+            console.warn(`Skipping invalid audio chunk ${index}`);
+            return;
+          }
+          
+          fs.writeFileSync(tempFile, audioBuffer);
+          tempAudioFiles.push(tempFile);
+        }
+      });
+      
+      if (tempAudioFiles.length === 0) {
+        reject(new Error('No valid audio chunks found'));
+        return;
+      }
+      
+      console.log(`Combining ${tempAudioFiles.length} audio files`);
+      
+      // Use FFmpeg to concatenate audio files
+      const command = ffmpeg();
+      
+      // Add all temp audio files as inputs
+      tempAudioFiles.forEach(file => {
+        command.input(file);
+      });
+      
+      command
+        .audioCodec('pcm_s16le')
+        .audioFrequency(44100)
+        .audioChannels(2)
+        .outputOptions([
+          '-f wav'
+        ])
+        .output(outputPath)
+        .on('start', (commandLine) => {
+          console.log('Audio combine command:', commandLine);
+        })
+        .on('end', () => {
+          console.log('Audio combination completed');
+          // Clean up temporary audio files
+          tempAudioFiles.forEach(file => {
+            try {
+              if (fs.existsSync(file)) {
+                fs.unlinkSync(file);
+              }
+            } catch (e) {
+              console.warn('Error deleting temp audio file:', e.message);
+            }
+          });
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          console.error('Audio combination error:', err.message);
+          // Clean up temporary audio files
+          tempAudioFiles.forEach(file => {
+            try {
+              if (fs.existsSync(file)) {
+                fs.unlinkSync(file);
+              }
+            } catch (e) {
+              console.warn('Error deleting temp audio file:', e.message);
+            }
+          });
+          reject(err);
+        })
+        .run();
+        
+    } catch (error) {
+      console.error('Error in combineAudioChunks:', error.message);
+      reject(error);
+    }
+  });
+}
+
+// Enhanced Socket.IO for livestreaming with audio support
 io.on('connection', (socket) => {
   socket.on('start-stream', (streamData) => {
     const streamId = streamData.streamId || streamData;
     const thumbnail = streamData.thumbnail || null;
     const title = streamData.streamTitle || `Stream ${streamId}`;
     const startTime = streamData.startTime || new Date().toISOString();
+    const hasAudio = streamData.hasAudio || false;
     
     activeStreams.set(streamId, { 
       streamerSocketId: socket.id, 
@@ -241,20 +374,23 @@ io.on('connection', (socket) => {
       lastFrame: null,
       thumbnail: thumbnail,
       title: title,
-      startTime: startTime
+      startTime: startTime,
+      hasAudio: hasAudio
     });
     
-    // Initialize recording immediately
+    // Initialize recording immediately with audio support
     recordings.set(streamId, { 
       frames: [], 
+      audioChunks: [],
       startTime: new Date(),
-      isRecording: true
+      isRecording: true,
+      hasAudio: hasAudio
     });
     
     socket.join(`stream-${streamId}`);
     socket.streamId = streamId;
     
-    console.log(`Stream started: ${streamId} with thumbnail: ${thumbnail ? 'Yes' : 'No'}`);
+    console.log(`Stream started: ${streamId} with audio: ${hasAudio ? 'Yes' : 'No'}`);
     console.log(`Recording initialized for stream: ${streamId}`);
   });
 
@@ -266,8 +402,10 @@ io.on('connection', (socket) => {
       if (!recordings.has(data.streamId)) {
         recordings.set(data.streamId, { 
           frames: [], 
+          audioChunks: [],
           startTime: new Date(),
-          isRecording: true
+          isRecording: true,
+          hasAudio: false
         });
       }
       
@@ -296,14 +434,64 @@ io.on('connection', (socket) => {
     }
   });
 
+  // New event handler for audio data
+  socket.on('stream-audio', (data) => {
+    if (activeStreams.has(data.streamId)) {
+      // Ensure recording exists
+      if (!recordings.has(data.streamId)) {
+        recordings.set(data.streamId, { 
+          frames: [], 
+          audioChunks: [],
+          startTime: new Date(),
+          isRecording: true,
+          hasAudio: true
+        });
+      }
+      
+      const recording = recordings.get(data.streamId);
+      
+      // Store audio chunks if actively recording
+      if (recording.isRecording) {
+        recording.audioChunks.push({
+          data: data.audioData,
+          timestamp: data.timestamp || Date.now(),
+          duration: data.duration || 0
+        });
+        
+        // Limit audio chunks to prevent memory issues
+        if (recording.audioChunks.length > 10000) {
+          recording.audioChunks = recording.audioChunks.slice(-10000);
+          console.log(`Audio buffer trimmed for stream ${data.streamId}, keeping last 10000 chunks`);
+        }
+        
+        // Log audio chunk count periodically
+        if (recording.audioChunks.length % 500 === 0) {
+          console.log(`Stream ${data.streamId}: ${recording.audioChunks.length} audio chunks recorded`);
+        }
+      }
+      
+      // Forward audio to viewers
+      socket.to(`stream-${data.streamId}`).emit('stream-audio', {
+        audioData: data.audioData,
+        timestamp: data.timestamp
+      });
+    }
+  });
+
   socket.on('join-stream', (streamId) => {
     if (activeStreams.has(streamId)) {
       socket.join(`stream-${streamId}`);
       activeStreams.get(streamId).viewers.add(socket.id);
       
-      const lastFrame = activeStreams.get(streamId).lastFrame;
+      const streamData = activeStreams.get(streamId);
+      const lastFrame = streamData.lastFrame;
       if (lastFrame) {
         socket.emit('stream-frame', lastFrame);
+      }
+      
+      // Notify about audio capability
+      if (streamData.hasAudio) {
+        socket.emit('stream-audio-enabled', true);
       }
     }
   });
@@ -317,7 +505,7 @@ io.on('connection', (socket) => {
       const recording = recordings.get(streamId);
       recording.endTime = new Date();
       recording.isRecording = false;
-      console.log(`Recording stopped for stream ${streamId}, total frames: ${recording.frames.length}`);
+      console.log(`Recording stopped for stream ${streamId}, total frames: ${recording.frames.length}, audio chunks: ${recording.audioChunks.length}`);
     }
   });
 
@@ -331,7 +519,7 @@ io.on('connection', (socket) => {
         const recording = recordings.get(streamId);
         recording.endTime = new Date();
         recording.isRecording = false;
-        console.log(`Recording stopped for disconnected stream ${streamId}, total frames: ${recording.frames.length}`);
+        console.log(`Recording stopped for disconnected stream ${streamId}, total frames: ${recording.frames.length}, audio chunks: ${recording.audioChunks.length}`);
       }
     }
   });
@@ -362,7 +550,8 @@ app.get('/admin/data', isAdmin, (req, res) => {
       viewers: streamData.viewers.size,
       thumbnail: streamData.thumbnail,
       title: streamData.title,
-      startTime: streamData.startTime
+      startTime: streamData.startTime,
+      hasAudio: streamData.hasAudio
     };
   });
   
@@ -377,7 +566,7 @@ app.get('/stream/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
 
-// Updated recording download endpoint with improved handling
+// Enhanced recording download endpoint with audio support
 app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
   const streamId = req.params.streamId;
   
@@ -403,20 +592,20 @@ app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
     return res.status(404).json({ error: 'No frames recorded' });
   }
   
-  console.log(`Found ${recording.frames.length} frames for stream: ${streamId}`);
+  console.log(`Found ${recording.frames.length} frames and ${recording.audioChunks.length} audio chunks for stream: ${streamId}`);
   
   try {
     const mp4Path = path.join(recordingsDir, `recording_${streamId}.mp4`);
     
-    // Always regenerate the MP4 to ensure we have all frames
+    // Always regenerate the MP4 to ensure we have all frames and audio
     if (fs.existsSync(mp4Path)) {
-      console.log(`Removing existing MP4 file to regenerate with all frames: ${mp4Path}`);
+      console.log(`Removing existing MP4 file to regenerate with all frames and audio: ${mp4Path}`);
       fs.unlinkSync(mp4Path);
     }
     
-    // Convert frames to MP4
-    console.log(`Converting ${recording.frames.length} frames to MP4 for stream ${streamId}`);
-    await convertFramesToMP4(streamId, recording.frames);
+    // Convert frames and audio to MP4
+    console.log(`Converting ${recording.frames.length} frames and ${recording.audioChunks.length} audio chunks to MP4 for stream ${streamId}`);
+    await convertFramesAndAudioToMP4(streamId, recording.frames, recording.audioChunks);
     
     // Verify the output file exists and has content
     if (!fs.existsSync(mp4Path)) {
@@ -463,13 +652,14 @@ app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
         error: 'Error processing recording',
         details: error.message,
         streamId: streamId,
-        frameCount: recording.frames ? recording.frames.length : 0
+        frameCount: recording.frames ? recording.frames.length : 0,
+        audioChunkCount: recording.audioChunks ? recording.audioChunks.length : 0
       });
     }
   }
 });
 
-// New endpoint to get recording status
+// Enhanced endpoint to get recording status with audio info
 app.get('/admin/recording/:streamId/status', isAdmin, (req, res) => {
   const streamId = req.params.streamId;
   
@@ -483,6 +673,8 @@ app.get('/admin/recording/:streamId/status', isAdmin, (req, res) => {
   res.json({
     streamId: streamId,
     frameCount: recording.frames.length,
+    audioChunkCount: recording.audioChunks.length,
+    hasAudio: recording.hasAudio,
     isRecording: recording.isRecording,
     isStreamActive: isActive,
     startTime: recording.startTime,
@@ -532,7 +724,7 @@ app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
       const recording = recordings.get(streamId);
       recording.endTime = new Date();
       recording.isRecording = false;
-      console.log(`Recording ended by admin for stream ${streamId}, total frames: ${recording.frames.length}`);
+      console.log(`Recording ended by admin for stream ${streamId}, total frames: ${recording.frames.length}, audio chunks: ${recording.audioChunks.length}`);
     }
     
     res.json({ success: true, message: 'Stream ended successfully' });
