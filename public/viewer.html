@@ -3,67 +3,628 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stream Viewer</title>
+    <title>Stream Viewer - Enhanced with Audio</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #000;
+            padding: 0;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
             color: white;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 3s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .stream-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            position: relative;
+        }
+        
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            transition: transform 0.3s ease;
+        }
+        
+        .video-wrapper:hover {
+            transform: translateY(-2px);
+        }
+        
+        #streamCanvas {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+        }
+        
+        .stream-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: opacity 0.3s ease;
+        }
+        
+        .controls-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .control-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .volume-slider {
+            width: 100px;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        .status-panel {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .status-connecting {
+            background: linear-gradient(45deg, #ffc107, #ff8c00);
+            color: #000;
+        }
+        
+        .status-connected {
+            background: linear-gradient(45deg, #28a745, #20c997);
+        }
+        
+        .status-error {
+            background: linear-gradient(45deg, #dc3545, #e83e8c);
+        }
+        
+        .status-audio-loading {
+            background: linear-gradient(45deg, #17a2b8, #6f42c1);
+        }
+        
+        .stream-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .info-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             text-align: center;
         }
-        h1 {
-            margin-bottom: 20px;
+        
+        .info-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
         }
-        #streamContainer {
-            max-width: 100%;
-            margin: 0 auto;
+        
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
         }
-        #streamImage {
-            max-width: 100%;
-            height: auto;
-            background-color: #333;
-            border: 2px solid #555;
+        
+        .audio-visualizer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            height: 40px;
+            margin: 10px 0;
         }
-        #status {
-            margin-top: 20px;
+        
+        .audio-bar {
+            width: 4px;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: white;
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
-        .connecting { background-color: #ffc107; color: #000; }
-        .connected { background-color: #28a745; }
-        .error { background-color: #dc3545; }
+        
+        .video-wrapper:hover .fullscreen-btn {
+            opacity: 1;
+        }
+        
+        @media (max-width: 768px) {
+            .controls-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .control-group {
+                justify-content: center;
+            }
+            
+            .stream-info {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .loading-animation {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .quality-indicator {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .quality-hd { color: #28a745; }
+        .quality-sd { color: #ffc107; }
+        .quality-ld { color: #dc3545; }
     </style>
 </head>
 <body>
-    <h1>Live Stream</h1>
-    <div id="streamContainer">
-        <img id="streamImage" alt="Live Stream" />
+    <div class="header">
+        <h1>🔴 Live Stream Viewer</h1>
     </div>
-    <div id="status" class="connecting">Connecting to stream...</div>
+    
+    <div class="stream-container">
+        <div class="video-wrapper">
+            <canvas id="streamCanvas" width="1280" height="720"></canvas>
+            <div class="stream-overlay" id="streamOverlay">
+                <div>
+                    <div class="loading-animation"></div>
+                    Connecting to stream...
+                </div>
+            </div>
+            <div class="quality-indicator quality-hd" id="qualityIndicator">HD</div>
+            <button class="fullscreen-btn" id="fullscreenBtn" title="Fullscreen">⛶</button>
+        </div>
+        
+        <div class="controls-panel">
+            <div class="controls-row">
+                <div class="control-group">
+                    <button class="control-btn" id="audioToggle" disabled>🔊 Enable Audio</button>
+                    <div class="volume-control">
+                        <span>🔉</span>
+                        <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="50">
+                        <span id="volumeDisplay">50%</span>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <button class="control-btn" id="reconnectBtn">🔄 Reconnect</button>
+                    <button class="control-btn" id="statsToggle">📊 Stats</button>
+                </div>
+            </div>
+            
+            <div class="audio-visualizer" id="audioVisualizer" style="display: none;">
+                <div class="audio-bar" style="height: 10px;"></div>
+                <div class="audio-bar" style="height: 15px;"></div>
+                <div class="audio-bar" style="height: 8px;"></div>
+                <div class="audio-bar" style="height: 20px;"></div>
+                <div class="audio-bar" style="height: 12px;"></div>
+                <div class="audio-bar" style="height: 18px;"></div>
+                <div class="audio-bar" style="height: 6px;"></div>
+                <div class="audio-bar" style="height: 14px;"></div>
+                <div class="audio-bar" style="height: 16px;"></div>
+                <div class="audio-bar" style="height: 11px;"></div>
+            </div>
+        </div>
+        
+        <div class="status-panel status-connecting" id="status">
+            <div class="loading-animation"></div>
+            Connecting to stream...
+        </div>
+        
+        <div class="stream-info" id="streamStats" style="display: none;">
+            <div class="info-card">
+                <div class="info-label">FPS</div>
+                <div class="info-value" id="fpsDisplay">0</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Data Rate</div>
+                <div class="info-value" id="dataRateDisplay">0 KB/s</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Frames Received</div>
+                <div class="info-value" id="framesDisplay">0</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Connection Quality</div>
+                <div class="info-value" id="qualityDisplay">Good</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Audio Status</div>
+                <div class="info-value" id="audioStatusDisplay">Disabled</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Stream Duration</div>
+                <div class="info-value" id="durationDisplay">00:00</div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="streamAudio" preload="none"></audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const streamImage = document.getElementById('streamImage');
+        const streamCanvas = document.getElementById('streamCanvas');
+        const ctx = streamCanvas.getContext('2d');
+        const streamOverlay = document.getElementById('streamOverlay');
         const status = document.getElementById('status');
-        const streamId = window.location.pathname.split('/').pop();
+        const audioToggle = document.getElementById('audioToggle');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeDisplay = document.getElementById('volumeDisplay');
+        const reconnectBtn = document.getElementById('reconnectBtn');
+        const statsToggle = document.getElementById('statsToggle');
+        const streamStats = document.getElementById('streamStats');
+        const audioVisualizer = document.getElementById('audioVisualizer');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const qualityIndicator = document.getElementById('qualityIndicator');
+        const streamAudio = document.getElementById('streamAudio');
         
+        const streamId = window.location.pathname.split('/').pop();
+        let isConnected = false;
+        let audioEnabled = false;
+        let audioContext = null;
+        let audioAnalyser = null;
+        let startTime = Date.now();
+        
+        // Performance tracking
+        let framesReceived = 0;
+        let bytesReceived = 0;
+        let lastStatsUpdate = Date.now();
+        let fpsCounter = 0;
+        
+        // Initialize
+        updateStatus('connecting', 'Connecting to stream...');
         socket.emit('join-stream', streamId);
         
-        socket.on('stream-frame', (frame) => {
-            streamImage.src = frame;
-            status.textContent = 'Connected - Live Stream';
-            status.className = 'connected';
+        // Socket events
+        socket.on('stream-frame', handleStreamFrame);
+        socket.on('stream-audio', handleStreamAudio);
+        socket.on('disconnect', () => {
+            updateStatus('error', 'Connection lost - Attempting to reconnect...');
+            isConnected = false;
         });
         
+        socket.on('connect', () => {
+            if (!isConnected) {
+                socket.emit('join-stream', streamId);
+            }
+        });
+        
+        function handleStreamFrame(frameData) {
+            if (!isConnected) {
+                isConnected = true;
+                updateStatus('connected', 'Connected - Live Stream Active');
+                streamOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    streamOverlay.style.display = 'none';
+                }, 300);
+            }
+            
+            // Draw frame to canvas
+            const img = new Image();
+            img.onload = () => {
+                // Adjust canvas size to match image aspect ratio
+                const aspectRatio = img.width / img.height;
+                const maxWidth = streamCanvas.parentElement.clientWidth;
+                const maxHeight = maxWidth / aspectRatio;
+                
+                streamCanvas.width = Math.min(img.width, maxWidth);
+                streamCanvas.height = Math.min(img.height, maxHeight);
+                
+                ctx.drawImage(img, 0, 0, streamCanvas.width, streamCanvas.height);
+                
+                // Update quality indicator
+                updateQualityIndicator(img.width, img.height);
+            };
+            img.src = frameData;
+            
+            // Update stats
+            framesReceived++;
+            bytesReceived += frameData.length;
+            fpsCounter++;
+            
+            updateStreamStats();
+        }
+        
+        function handleStreamAudio(audioData) {
+            if (!audioEnabled) {
+                audioToggle.disabled = false;
+                audioToggle.textContent = '🔊 Enable Audio';
+                return;
+            }
+            
+            // Handle audio data (placeholder for WebRTC or audio streaming implementation)
+            console.log('Audio data received:', audioData);
+        }
+        
+        function updateStatus(type, message) {
+            status.className = `status-panel status-${type}`;
+            status.innerHTML = type === 'connecting' ? 
+                `<div class="loading-animation"></div>${message}` : message;
+        }
+        
+        function updateQualityIndicator(width, height) {
+            let quality = 'LD';
+            let className = 'quality-ld';
+            
+            if (height >= 1080) {
+                quality = 'FHD';
+                className = 'quality-hd';
+            } else if (height >= 720) {
+                quality = 'HD';
+                className = 'quality-hd';
+            } else if (height >= 480) {
+                quality = 'SD';
+                className = 'quality-sd';
+            }
+            
+            qualityIndicator.textContent = quality;
+            qualityIndicator.className = `quality-indicator ${className}`;
+        }
+        
+        function updateStreamStats() {
+            const now = Date.now();
+            const timeDiff = (now - lastStatsUpdate) / 1000;
+            
+            if (timeDiff >= 1) {
+                const fps = Math.round(fpsCounter / timeDiff);
+                const dataRate = Math.round((bytesReceived / 1024) / timeDiff);
+                
+                document.getElementById('fpsDisplay').textContent = fps;
+                document.getElementById('dataRateDisplay').textContent = `${dataRate} KB/s`;
+                document.getElementById('framesDisplay').textContent = framesReceived;
+                
+                // Update duration
+                const duration = Math.floor((now - startTime) / 1000);
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                document.getElementById('durationDisplay').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Reset counters
+                fpsCounter = 0;
+                bytesReceived = 0;
+                lastStatsUpdate = now;
+                
+                // Update connection quality based on FPS
+                let quality = 'Poor';
+                if (fps >= 25) quality = 'Excellent';
+                else if (fps >= 15) quality = 'Good';
+                else if (fps >= 10) quality = 'Fair';
+                
+                document.getElementById('qualityDisplay').textContent = quality;
+            }
+        }
+        
+        // Audio controls
+        audioToggle.addEventListener('click', async () => {
+            if (!audioEnabled) {
+                try {
+                    updateStatus('audio-loading', 'Initializing audio...');
+                    
+                    // Initialize audio context for visualization
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    // For now, we'll simulate audio since the backend needs to be updated
+                    // to support actual audio streaming
+                    audioEnabled = true;
+                    audioToggle.textContent = '🔇 Disable Audio';
+                    audioVisualizer.style.display = 'flex';
+                    document.getElementById('audioStatusDisplay').textContent = 'Enabled';
+                    
+                    // Start audio visualization simulation
+                    simulateAudioVisualization();
+                    
+                    updateStatus('connected', 'Connected - Live Stream Active (Audio Enabled)');
+                    
+                } catch (error) {
+                    console.error('Audio initialization failed:', error);
+                    updateStatus('error', 'Audio initialization failed');
+                }
+            } else {
+                audioEnabled = false;
+                audioToggle.textContent = '🔊 Enable Audio';
+                audioVisualizer.style.display = 'none';
+                document.getElementById('audioStatusDisplay').textContent = 'Disabled';
+                
+                if (audioContext) {
+                    audioContext.close();
+                    audioContext = null;
+                }
+                
+                updateStatus('connected', 'Connected - Live Stream Active');
+            }
+        });
+        
+        volumeSlider.addEventListener('input', (e) => {
+            const volume = e.target.value;
+            volumeDisplay.textContent = `${volume}%`;
+            streamAudio.volume = volume / 100;
+        });
+        
+        // Simulate audio visualization (replace with real audio analysis when backend supports it)
+        function simulateAudioVisualization() {
+            if (!audioEnabled) return;
+            
+            const bars = audioVisualizer.querySelectorAll('.audio-bar');
+            bars.forEach((bar, index) => {
+                const height = Math.random() * 30 + 5;
+                bar.style.height = `${height}px`;
+            });
+            
+            setTimeout(simulateAudioVisualization, 100);
+        }
+        
+        // Other controls
+        reconnectBtn.addEventListener('click', () => {
+            updateStatus('connecting', 'Reconnecting...');
+            socket.disconnect();
+            socket.connect();
+            framesReceived = 0;
+            startTime = Date.now();
+        });
+        
+        statsToggle.addEventListener('click', () => {
+            const isVisible = streamStats.style.display !== 'none';
+            streamStats.style.display = isVisible ? 'none' : 'grid';
+            statsToggle.textContent = isVisible ? '📊 Show Stats' : '📊 Hide Stats';
+        });
+        
+        fullscreenBtn.addEventListener('click', () => {
+            if (streamCanvas.requestFullscreen) {
+                streamCanvas.requestFullscreen();
+            } else if (streamCanvas.webkitRequestFullscreen) {
+                streamCanvas.webkitRequestFullscreen();
+            } else if (streamCanvas.msRequestFullscreen) {
+                streamCanvas.msRequestFullscreen();
+            }
+        });
+        
+        // Check for stream availability after timeout
         setTimeout(() => {
-            if (!streamImage.src) {
-                status.textContent = 'Stream not available';
-                status.className = 'error';
+            if (!isConnected) {
+                updateStatus('error', 'Stream not available or has ended');
+                streamOverlay.innerHTML = '<div>📺 Stream not available</div>';
             }
         }, 5000);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (isConnected) {
+                // Canvas will resize on next frame
+            }
+        });
     </script>
 </body>
 </html>
