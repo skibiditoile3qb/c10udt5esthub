@@ -301,11 +301,8 @@ io.on('connection', (socket) => {
       socket.join(`stream-${streamId}`);
       activeStreams.get(streamId).viewers.add(socket.id);
       
-      const streamData = activeStreams.get(streamId);
-      const lastFrame = streamData.lastFrame;
-      if (lastFrame) {
-        socket.emit('stream-frame', lastFrame);
-      }
+    
+      
     }
   });
 
