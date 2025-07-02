@@ -78,16 +78,16 @@ function checkFFmpegAvailability() {
   });
 }
 
-// Function to convert frames to MP4 (audio functionality removed)
+// Function to convert frames to MP4 (optimized for 2-second clips)
 async function convertFramesToMP4(streamId, frames) {
   const tempDir = path.join(recordingsDir, `temp_${streamId}`);
-  const outputFile = path.join(recordingsDir, `recording_${streamId}.mp4`);
+  const outputFile = path.join(recordingsDir, `recording_${streamId}_clip.mp4`);
   
   try {
     // Check if FFmpeg is available
     await checkFFmpegAvailability();
     
-    console.log(`Processing ${frames.length} frames for stream ${streamId}`);
+    console.log(`Processing ${frames.length} frames (2-second clip) for stream ${streamId}`);
     
     // Validate frames
     if (!frames || frames.length === 0) {
@@ -163,12 +163,12 @@ async function convertFramesToMP4(streamId, frames) {
       
       const command = ffmpeg()
         .input(inputPattern)
-        .inputFPS(10) // Adjusted FPS for better compatibility
+        .inputFPS(30) // Higher FPS for 2-second clips
         .videoCodec('libx264')
         .outputOptions([
           '-pix_fmt yuv420p',
-          '-crf 23',
-          '-preset fast',
+          '-crf 18', // Higher quality for short clips
+          '-preset faster', // Faster encoding for short clips
           '-movflags +faststart'
         ])
         .output(outputFile);
@@ -183,7 +183,7 @@ async function convertFramesToMP4(streamId, frames) {
           }
         })
         .on('end', () => {
-          console.log(`MP4 creation completed: ${outputFile}`);
+          console.log(`MP4 clip creation completed: ${outputFile}`);
           // Clean up temp files
           try {
             fs.rmSync(tempDir, { recursive: true, force: true });
@@ -227,7 +227,7 @@ async function convertFramesToMP4(streamId, frames) {
   }
 }
 
-// Socket.IO for livestreaming (audio functionality removed)
+// Socket.IO for livestreaming with 2-second buffer optimization
 io.on('connection', (socket) => {
   socket.on('start-stream', (streamData) => {
     const streamId = streamData.streamId || streamData;
@@ -244,9 +244,11 @@ io.on('connection', (socket) => {
       startTime: startTime
     });
     
-    // Initialize recording
+    // Initialize recording with 2-second buffer
     recordings.set(streamId, { 
-      frames: [],
+      frames: [], // Only stores last 2 seconds
+      fullRecording: null, // Optional full recording
+      isFullRecording: false,
       startTime: new Date(),
       isRecording: true
     });
@@ -254,8 +256,7 @@ io.on('connection', (socket) => {
     socket.join(`stream-${streamId}`);
     socket.streamId = streamId;
     
-    console.log(`Stream started: ${streamId}`);
-    console.log(`Recording initialized for stream: ${streamId}`);
+    console.log(`Stream started: ${streamId} (2-second buffer mode)`);
   });
 
   socket.on('stream-frame', (data) => {
@@ -266,6 +267,8 @@ io.on('connection', (socket) => {
       if (!recordings.has(data.streamId)) {
         recordings.set(data.streamId, { 
           frames: [],
+          fullRecording: null,
+          isFullRecording: false,
           startTime: new Date(),
           isRecording: true
         });
@@ -275,20 +278,33 @@ io.on('connection', (socket) => {
       
       // Only store frames if actively recording
       if (recording.isRecording) {
-        recording.frames.push({
+        const now = Date.now();
+        const frameData = {
           frame: data.frame,
-          timestamp: data.timestamp || Date.now()
-        });
+          timestamp: data.timestamp || now
+        };
         
-        // Increase frame limit and use sliding window approach
-        if (recording.frames.length > 50000) { // Increased from 30000
-          recording.frames = recording.frames.slice(-50000);
-          console.log(`Frame buffer trimmed for stream ${data.streamId}, keeping last 50000 frames`);
+        // Add to 2-second buffer
+        recording.frames.push(frameData);
+        
+        // Keep only last 2 seconds of frames (filter by timestamp)
+        const twoSecondsAgo = now - 2000;
+        recording.frames = recording.frames.filter(frame => frame.timestamp > twoSecondsAgo);
+        
+        // Optional: Store in full recording if enabled
+        if (recording.isFullRecording && recording.fullRecording) {
+          recording.fullRecording.push(frameData);
+          
+          // Limit full recording to prevent memory issues (keep last ~10 minutes at 30fps)
+          if (recording.fullRecording.length > 18000) {
+            recording.fullRecording = recording.fullRecording.slice(-18000);
+            console.log(`Full recording buffer trimmed for stream ${data.streamId}`);
+          }
         }
         
-        // Log frame count periodically
-        if (recording.frames.length % 1000 === 0) {
-          console.log(`Stream ${data.streamId}: ${recording.frames.length} frames recorded`);
+        // Log buffer status periodically
+        if (recording.frames.length % 60 === 0) { // Every ~2 seconds at 30fps
+          console.log(`Stream ${data.streamId}: ${recording.frames.length} frames in 2s buffer`);
         }
       }
       
@@ -300,9 +316,6 @@ io.on('connection', (socket) => {
     if (activeStreams.has(streamId)) {
       socket.join(`stream-${streamId}`);
       activeStreams.get(streamId).viewers.add(socket.id);
-      
-    
-      
     }
   });
 
@@ -315,7 +328,7 @@ io.on('connection', (socket) => {
       const recording = recordings.get(streamId);
       recording.endTime = new Date();
       recording.isRecording = false;
-      console.log(`Recording stopped for stream ${streamId}, total frames: ${recording.frames.length}`);
+      console.log(`Recording stopped for stream ${streamId}, buffer frames: ${recording.frames.length}`);
     }
   });
 
@@ -329,7 +342,7 @@ io.on('connection', (socket) => {
         const recording = recordings.get(streamId);
         recording.endTime = new Date();
         recording.isRecording = false;
-        console.log(`Recording stopped for disconnected stream ${streamId}, total frames: ${recording.frames.length}`);
+        console.log(`Recording stopped for disconnected stream ${streamId}, buffer frames: ${recording.frames.length}`);
       }
     }
   });
@@ -355,12 +368,15 @@ app.get('/admin/view', isAdmin, (req, res) => {
 app.get('/admin/data', isAdmin, (req, res) => {
   const streams = Array.from(activeStreams.keys()).map(id => {
     const streamData = activeStreams.get(id);
+    const recording = recordings.get(id);
     return {
       id,
       viewers: streamData.viewers.size,
       thumbnail: streamData.thumbnail,
       title: streamData.title,
-      startTime: streamData.startTime
+      startTime: streamData.startTime,
+      bufferFrames: recording ? recording.frames.length : 0,
+      fullRecordingActive: recording ? recording.isFullRecording : false
     };
   });
   
@@ -375,11 +391,12 @@ app.get('/stream/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
 
-// Recording download endpoint (audio support removed)
+// Recording download endpoint - now downloads 2-second clips
 app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
   const streamId = req.params.streamId;
+  const type = req.query.type || 'clip'; // 'clip' or 'full'
   
-  console.log(`Recording request for stream: ${streamId}`);
+  console.log(`Recording request for stream: ${streamId}, type: ${type}`);
   
   if (!recordings.has(streamId)) {
     console.log(`Recording not found for stream: ${streamId}`);
@@ -387,34 +404,47 @@ app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
   }
   
   const recording = recordings.get(streamId);
+  let framesToProcess;
+  let filename;
   
-  // If stream is still active, stop recording temporarily to get all frames
-  const wasRecording = recording.isRecording;
-  if (wasRecording) {
-    console.log(`Stream ${streamId} is still active, stopping recording to capture all frames`);
-    recording.isRecording = false;
-    recording.endTime = new Date();
+  if (type === 'full' && recording.fullRecording && recording.fullRecording.length > 0) {
+    framesToProcess = recording.fullRecording;
+    filename = `stream_${streamId}_full_recording.mp4`;
+    console.log(`Processing full recording with ${framesToProcess.length} frames`);
+  } else {
+    framesToProcess = recording.frames;
+    filename = `stream_${streamId}_2s_clip.mp4`;
+    console.log(`Processing 2-second clip with ${framesToProcess.length} frames`);
   }
   
-  if (!recording.frames || recording.frames.length === 0) {
-    console.log(`No frames recorded for stream: ${streamId}`);
-    return res.status(404).json({ error: 'No frames recorded' });
+  if (!framesToProcess || framesToProcess.length === 0) {
+    console.log(`No frames available for stream: ${streamId}, type: ${type}`);
+    return res.status(404).json({ 
+      error: 'No frames available', 
+      suggestion: type === 'clip' ? 'Try downloading while stream is active' : 'Enable full recording first'
+    });
   }
   
-  console.log(`Found ${recording.frames.length} frames for stream: ${streamId}`);
+  if (framesToProcess.length < 5) {
+    return res.status(400).json({ 
+      error: 'Insufficient frames for recording',
+      frameCount: framesToProcess.length,
+      suggestion: 'Wait for more frames to be captured'
+    });
+  }
   
   try {
-    const mp4Path = path.join(recordingsDir, `recording_${streamId}.mp4`);
+    const mp4Path = path.join(recordingsDir, `recording_${streamId}_${type}.mp4`);
     
-    // Always regenerate the MP4 to ensure we have all frames
+    // Remove existing file to regenerate
     if (fs.existsSync(mp4Path)) {
-      console.log(`Removing existing MP4 file to regenerate with all frames: ${mp4Path}`);
+      console.log(`Removing existing MP4 file: ${mp4Path}`);
       fs.unlinkSync(mp4Path);
     }
     
     // Convert frames to MP4
-    console.log(`Converting ${recording.frames.length} frames to MP4 for stream ${streamId}`);
-    await convertFramesToMP4(streamId, recording.frames);
+    console.log(`Converting ${framesToProcess.length} frames to MP4 for stream ${streamId}`);
+    await convertFramesToMP4(streamId, framesToProcess);
     
     // Verify the output file exists and has content
     if (!fs.existsSync(mp4Path)) {
@@ -428,15 +458,8 @@ app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
     
     console.log(`MP4 file created successfully: ${mp4Path} (${stats.size} bytes)`);
     
-    // If we temporarily stopped recording, resume it
-    if (wasRecording && activeStreams.has(streamId)) {
-      console.log(`Resuming recording for active stream ${streamId}`);
-      recording.isRecording = true;
-      delete recording.endTime;
-    }
-    
     // Send the MP4 file for download
-    res.download(mp4Path, `stream_${streamId}_recording.mp4`, (err) => {
+    res.download(mp4Path, filename, (err) => {
       if (err) {
         console.error('Download error:', err);
         if (!res.headersSent) {
@@ -449,21 +472,40 @@ app.get('/admin/recording/:streamId', isAdmin, async (req, res) => {
     console.error('Error processing recording for stream', streamId, ':', error.message);
     console.error('Stack trace:', error.stack);
     
-    // If we temporarily stopped recording, resume it
-    if (wasRecording && activeStreams.has(streamId)) {
-      console.log(`Resuming recording after error for active stream ${streamId}`);
-      recording.isRecording = true;
-      delete recording.endTime;
-    }
-    
     if (!res.headersSent) {
       res.status(500).json({ 
         error: 'Error processing recording',
         details: error.message,
         streamId: streamId,
-        frameCount: recording.frames ? recording.frames.length : 0
+        frameCount: framesToProcess.length,
+        type: type
       });
     }
+  }
+});
+
+// New endpoint to start/stop full recording
+app.post('/admin/streams/:streamId/full-recording', isAdmin, (req, res) => {
+  const streamId = req.params.streamId;
+  const action = req.body.action; // 'start' or 'stop'
+  
+  if (!recordings.has(streamId)) {
+    return res.status(404).json({ error: 'Stream not found' });
+  }
+  
+  const recording = recordings.get(streamId);
+  
+  if (action === 'start') {
+    recording.fullRecording = [];
+    recording.isFullRecording = true;
+    console.log(`Full recording started for stream ${streamId}`);
+    res.json({ success: true, message: 'Full recording started' });
+  } else if (action === 'stop') {
+    recording.isFullRecording = false;
+    console.log(`Full recording stopped for stream ${streamId}, frames: ${recording.fullRecording ? recording.fullRecording.length : 0}`);
+    res.json({ success: true, message: 'Full recording stopped' });
+  } else {
+    res.status(400).json({ error: 'Invalid action. Use "start" or "stop"' });
   }
 });
 
@@ -480,8 +522,10 @@ app.get('/admin/recording/:streamId/status', isAdmin, (req, res) => {
   
   res.json({
     streamId: streamId,
-    frameCount: recording.frames.length,
+    bufferFrameCount: recording.frames.length,
+    fullRecordingFrameCount: recording.fullRecording ? recording.fullRecording.length : 0,
     isRecording: recording.isRecording,
+    isFullRecording: recording.isFullRecording,
     isStreamActive: isActive,
     startTime: recording.startTime,
     endTime: recording.endTime,
@@ -530,7 +574,7 @@ app.post('/admin/streams/:streamId/end', isAdmin, (req, res) => {
       const recording = recordings.get(streamId);
       recording.endTime = new Date();
       recording.isRecording = false;
-      console.log(`Recording ended by admin for stream ${streamId}, total frames: ${recording.frames.length}`);
+      console.log(`Recording ended by admin for stream ${streamId}, buffer frames: ${recording.frames.length}`);
     }
     
     res.json({ success: true, message: 'Stream ended successfully' });
@@ -566,6 +610,7 @@ app.set('trust proxy', true);
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${port}`);
+  console.log('Optimized with 2-second frame buffer for maximum performance!');
   console.log('Checking FFmpeg availability...');
   checkFFmpegAvailability()
     .then(() => console.log('FFmpeg check passed'))
