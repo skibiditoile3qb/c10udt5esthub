@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Panel - Enhanced with Camera & Audio</title>
+    <title>User Panel - Enhanced with Camera</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -74,8 +74,8 @@
         .streaming { background-color: #d4edda; color: #155724; }
         .stopped { background-color: #f8d7da; color: #721c24; }
         .media-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            justify-content: center;
             gap: 15px;
             margin: 15px 0;
         }
@@ -84,6 +84,8 @@
             padding: 15px;
             border-radius: 8px;
             border: 1px solid #dee2e6;
+            flex: 1;
+            max-width: 400px;
         }
         .media-group h3 {
             margin: 0 0 10px 0;
@@ -153,25 +155,6 @@
             border-radius: 8px;
             border: 2px solid #007bff;
         }
-        .audio-levels {
-            display: flex;
-            align-items: center;
-            margin-top: 10px;
-        }
-        .audio-level-bar {
-            flex: 1;
-            height: 20px;
-            background-color: #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 0 10px;
-        }
-        .audio-level-fill {
-            height: 100%;
-            background: linear-gradient(to right, #28a745, #ffc107, #dc3545);
-            width: 0%;
-            transition: width 0.1s ease;
-        }
     </style>
 </head>
 <body>
@@ -197,7 +180,7 @@
         </form>
 
         <div class="stream-section">
-            <h2>Multi-Source Live Stream</h2>
+            <h2>Live Video Stream</h2>
             
             <div class="form-group">
                 <label for="thumbnail">Stream Thumbnail (optional):</label>
@@ -233,34 +216,6 @@
                         <div class="device-item">
                             <span>🔍 Scanning for cameras...</span>
                         </div>
-                    </div>
-                </div>
-
-                <div class="media-group">
-                    <h3>🎤 Audio Sources</h3>
-                    <div>
-                        <label>
-                            <input type="checkbox" id="enableMicrophone"> Microphone
-                        </label>
-                    </div>
-                    <div>
-                        <label>
-                            <input type="checkbox" id="enableSystemAudio"> System Audio
-                        </label>
-                    </div>
-                    
-                    <div id="microphoneDevices" class="device-list" style="display: none;">
-                        <div class="device-item">
-                            <span>🔍 Scanning for microphones...</span>
-                        </div>
-                    </div>
-
-                    <div class="audio-levels" style="display: none;" id="audioLevels">
-                        <span style="font-size: 12px;">🎤</span>
-                        <div class="audio-level-bar">
-                            <div class="audio-level-fill" id="micLevelFill"></div>
-                        </div>
-                        <span style="font-size: 12px;">🔊</span>
                     </div>
                 </div>
             </div>
@@ -311,11 +266,10 @@
             <div id="statsDisplay" class="stats" style="display: none;">
                 FPS: <span id="actualFps">0</span> | 
                 Data Rate: <span id="dataRate">0</span> KB/s | 
-                Frames Sent: <span id="framesSent">0</span> |
-                Audio: <span id="audioStatus">Disabled</span>
+                Frames Sent: <span id="framesSent">0</span>
             </div>
             
-            <button id="startStream">Start Enhanced Stream</button>
+            <button id="startStream">Start Video Stream</button>
             <button id="stopStream" style="display:none;">Stop Stream</button>
         </div>
     </div>
@@ -336,22 +290,15 @@
         const removeThumbnailBtn = document.getElementById('removeThumbnail');
         const previewContainer = document.getElementById('previewContainer');
         const previewVideo = document.getElementById('previewVideo');
-        const audioLevels = document.getElementById('audioLevels');
-        const micLevelFill = document.getElementById('micLevelFill');
         
         let localStream;
         let screenStream;
         let cameraStream;
-        let audioStream;
-        let systemAudioStream;
         let streamId;
         let streaming = false;
         let frameInterval;
         let thumbnailData = null;
-        let audioContext;
-        let micAnalyser;
         let selectedCamera = null;
-        let selectedMicrophone = null;
         
         // Performance tracking
         let framesSent = 0;
@@ -365,12 +312,10 @@
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 
                 const cameras = devices.filter(device => device.kind === 'videoinput');
-                const microphones = devices.filter(device => device.kind === 'audioinput');
                 
                 populateDeviceList('cameraDevices', cameras, 'camera');
-                populateDeviceList('microphoneDevices', microphones, 'microphone');
                 
-                console.log(`Found ${cameras.length} cameras and ${microphones.length} microphones`);
+                console.log(`Found ${cameras.length} cameras`);
                 
             } catch (error) {
                 console.error('Error scanning devices:', error);
@@ -402,7 +347,6 @@
                 
                 if (index === 0) {
                     if (type === 'camera') selectedCamera = device.deviceId;
-                    if (type === 'microphone') selectedMicrophone = device.deviceId;
                 }
             });
             
@@ -410,44 +354,14 @@
             container.addEventListener('change', (e) => {
                 if (e.target.type === 'radio') {
                     if (type === 'camera') selectedCamera = e.target.value;
-                    if (type === 'microphone') selectedMicrophone = e.target.value;
                     updatePreview();
                 }
             });
         }
 
-        // Audio level monitoring
-        function startAudioMonitoring(stream) {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            
-            const source = audioContext.createMediaStreamSource(stream);
-            micAnalyser = audioContext.createAnalyser();
-            micAnalyser.fftSize = 256;
-            source.connect(micAnalyser);
-            
-            const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
-            
-            function updateAudioLevel() {
-                if (!streaming) return;
-                
-                micAnalyser.getByteFrequencyData(dataArray);
-                const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-                const percentage = (average / 255) * 100;
-                micLevelFill.style.width = percentage + '%';
-                
-                requestAnimationFrame(updateAudioLevel);
-            }
-            
-            updateAudioLevel();
-        }
-
         // Update preview based on selected sources
         async function updatePreview() {
             const videoSource = document.querySelector('input[name="videoSource"]:checked').value;
-            const enableMic = document.getElementById('enableMicrophone').checked;
-            const enableSystemAudio = document.getElementById('enableSystemAudio').checked;
             
             try {
                 // Stop existing streams
@@ -460,38 +374,19 @@
                 // Handle video sources
                 if (videoSource === 'screen' || videoSource === 'both') {
                     screenStream = await navigator.mediaDevices.getDisplayMedia({
-                        video: { frameRate: { ideal: 30 } },
-                        audio: enableSystemAudio
+                        video: { frameRate: { ideal: 30 } }
                     });
                     
                     screenStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
-                    if (enableSystemAudio) {
-                        screenStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
-                    }
                 }
                 
                 if (videoSource === 'camera' || videoSource === 'both') {
                     const constraints = {
-                        video: selectedCamera ? { deviceId: selectedCamera } : true,
-                        audio: false // We'll handle audio separately
+                        video: selectedCamera ? { deviceId: selectedCamera } : true
                     };
                     
                     cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
                     cameraStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
-                }
-                
-                // Handle microphone
-                if (enableMic && selectedMicrophone) {
-                    const micConstraints = {
-                        audio: { deviceId: selectedMicrophone },
-                        video: false
-                    };
-                    
-                    audioStream = await navigator.mediaDevices.getUserMedia(micConstraints);
-                    audioStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
-                    
-                    startAudioMonitoring(audioStream);
-                    audioLevels.style.display = 'flex';
                 }
                 
                 if (combinedStream.getTracks().length > 0) {
@@ -515,14 +410,6 @@
                 updatePreview();
             });
         });
-
-        document.getElementById('enableMicrophone').addEventListener('change', (e) => {
-            const micDevices = document.getElementById('microphoneDevices');
-            micDevices.style.display = e.target.checked ? 'block' : 'none';
-            updatePreview();
-        });
-
-        document.getElementById('enableSystemAudio').addEventListener('change', updatePreview);
 
         // Thumbnail handling
         thumbnailInput.addEventListener('change', function(e) {
@@ -563,7 +450,7 @@
         // Request permissions on first interaction
         document.addEventListener('click', async () => {
             try {
-                await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                await navigator.mediaDevices.getUserMedia({ video: true });
                 scanForDevices(); // Re-scan to get device labels
             } catch (error) {
                 console.log('Permission not granted yet');
@@ -575,7 +462,7 @@
                 await updatePreview(); // Ensure we have the latest stream
                 
                 if (!previewVideo.srcObject) {
-                    alert('Please select at least one media source');
+                    alert('Please select at least one video source');
                     return;
                 }
                 
@@ -603,33 +490,21 @@
                     canvas.width = Math.floor(video.videoWidth * scale);
                     canvas.height = Math.floor(video.videoHeight * scale);
                     
-                    const audioTracks = localStream.getAudioTracks();
-                    const hasAudio = audioTracks.length > 0;
-                    
                     socket.emit('start-stream', { 
                         streamId, 
                         thumbnail: thumbnailData,
-                        streamTitle: `Enhanced Stream ${streamId}`,
-                        startTime: new Date().toISOString(),
-                        hasAudio: hasAudio,
-                        audioTrackCount: audioTracks.length
+                        streamTitle: `Video Stream ${streamId}`,
+                        startTime: new Date().toISOString()
                     });
                     
                     startOptimizedCapture(video, canvas, ctx);
-                    
-                    if (hasAudio) {
-                        startAudioStreaming(localStream);
-                    }
                 };
                 
-                streamStatus.textContent = `Multi-Source Streaming (ID: ${streamId})`;
+                streamStatus.textContent = `Video Streaming (ID: ${streamId})`;
                 streamStatus.className = 'streaming';
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
                 statsDisplay.style.display = 'block';
-                
-                document.getElementById('audioStatus').textContent = 
-                    localStream.getAudioTracks().length > 0 ? 'Enabled' : 'Disabled';
                 
                 localStream.getTracks().forEach(track => {
                     track.onended = stopStream;
@@ -670,15 +545,6 @@
             frameInterval = setInterval(captureFrame, fps);
         }
 
-        function startAudioStreaming(stream) {
-            const audioTracks = stream.getAudioTracks();
-            if (audioTracks.length === 0) return;
-            
-            // Note: Audio streaming would require additional server-side handling
-            // This is a placeholder for audio data transmission
-            console.log(`Audio streaming started with ${audioTracks.length} tracks`);
-        }
-
         function updateStats() {
             if (!streaming) return;
             
@@ -717,16 +583,6 @@
             if (cameraStream) {
                 cameraStream.getTracks().forEach(track => track.stop());
             }
-            if (audioStream) {
-                audioStream.getTracks().forEach(track => track.stop());
-            }
-            if (systemAudioStream) {
-                systemAudioStream.getTracks().forEach(track => track.stop());
-            }
-            if (audioContext) {
-                audioContext.close();
-                audioContext = null;
-            }
             
             socket.emit('stop-stream', streamId);
             
@@ -736,7 +592,6 @@
             stopBtn.style.display = 'none';
             statsDisplay.style.display = 'none';
             previewContainer.style.display = 'none';
-            audioLevels.style.display = 'none';
         }
 
         socket.on('force-stop-stream', () => {
