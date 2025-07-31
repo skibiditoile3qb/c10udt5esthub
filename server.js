@@ -58,9 +58,7 @@ const checkIsAdmin = (req) => {
 const isAdmin = (req, res, next) => {
   if (checkIsAdmin(req)) {
     next();
-  } else
-    
-  }
+  } 
 };
 
 // Check if FFmpeg is available
