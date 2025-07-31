@@ -58,8 +58,8 @@ const checkIsAdmin = (req) => {
 const isAdmin = (req, res, next) => {
   if (checkIsAdmin(req)) {
     next();
-  } else {
-    res.redirect('/user');
+  } else
+    
   }
 };
 
