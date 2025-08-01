@@ -11,7 +11,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const port = process.env.PORT || 3000;
-const adminIP = '68.102.150.181';
+const adminIP = '73.243.80.232';
 
 let database = [];
 let uploadedFiles = [];
@@ -58,7 +58,9 @@ const checkIsAdmin = (req) => {
 const isAdmin = (req, res, next) => {
   if (checkIsAdmin(req)) {
     next();
-  } 
+  } else {
+    res.redirect('/user');
+  }
 };
 
 // Check if FFmpeg is available
